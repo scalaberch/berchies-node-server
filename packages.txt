@@ -1,0 +1,12 @@
+axios@1.13.2
+body-parser@2.2.1
+express@5.1.0
+express-session@1.18.2
+express-useragent@2.0.2
+helmet@UNKNOWN
+ip@2.0.1
+lodash@4.17.21
+moment-timezone@0.6.0
+moralis@UNKNOWN
+obscenity@UNKNOWN
+uuid@9.0.1
