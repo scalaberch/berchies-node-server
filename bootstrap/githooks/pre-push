@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Check if server/ has changes
+cd server
+if ! git diff-index --quiet HEAD --; then
+    echo "Pushing submodule server/..."
+    git push origin main
+fi
+cd ..
+
+# Continue normal push for main repo
+exit 0
