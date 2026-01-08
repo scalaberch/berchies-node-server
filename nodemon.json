@@ -3,5 +3,6 @@
   "watch": ["server", "src"],
   "exec": "node -r ts-node/register --inspect ./index.ts",
   "ext": ".ts,.js",
-  "signal": "SIGTERM"
+  "signal": "SIGTERM",
+  "killTimeout": 5000
 }

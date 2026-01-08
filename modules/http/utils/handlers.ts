@@ -141,6 +141,8 @@ export const errorHandler = (
   const message = err.message || "Something went wrong."; // Set default message
   const errors: Array<{ field: string; message: string }> = []; // Empty array for collecting errors
 
+  console.log('hahahah')
+
   // Send error response
   res.status(status).json({
     message,

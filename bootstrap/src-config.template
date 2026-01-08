@@ -20,9 +20,23 @@ const modules: EnabledModules = [
 const corsDomainList = [
 ];
 
+/**
+ * WebSockets Configuration
+ * 
+ * Here we define configuration for websockets module.
+ *
+ */
+const websocketConfig: WSConfig = {
+  authMethod: 'none',
+};
 
+/**
+ * main server config
+ * 
+ */
 const AppConfig: Partial<ServerConfig> = {
   modules,
+  websockets: websocketConfig,
 }
 
 export default AppConfig

@@ -1,5 +1,6 @@
 import { EnabledModules, Module } from "./modules/defines"
 import { HttpConfig } from "./modules/http/defines";
+import { WSConfig } from "./modules/websockets/defines";
 
 export enum Environment {
   dev = "dev",
@@ -14,4 +15,7 @@ export interface ServerConfig {
 
   // http sub modules and configuration
   http?: HttpConfig
+  websockets?: WSConfig
 }
+
+export const SHUTDOWN_FORCE_TIMEOUT = 10000; // 10 secs

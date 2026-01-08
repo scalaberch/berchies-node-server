@@ -32,7 +32,7 @@ export const loadAllModules = async (server: Server, loadedModules: Array<Module
     const entry = path.join(ModulesFolder, selectedModule, "index");
     try {
       const mod = (await import(entry)).default;
-      console.log(mod);
+      // console.log(mod);
 
 
       modules[selectedModule] = mod;

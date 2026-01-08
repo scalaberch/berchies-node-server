@@ -1,11 +1,11 @@
-import path from "path";
-import Files, { currentDir } from "@server/lib/files";
-import { ServerConfig } from "@server/defines";
-import { Server } from "..";
-import { Log } from "@server/logs"
+import path from 'path';
+import Files, { currentDir } from '@server/lib/files';
+import { ServerConfig } from '@server/defines';
+import { Server } from '..';
+import { Log } from '@server/logs';
 
 export const ModulesFolder = `${currentDir}/server/modules`;
-export type Module = "http" | "cache" | "mysql" | "websockets";
+export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe';
 export type EnabledModules = Module[];
 
 export interface ServerModuleInterface {
@@ -30,7 +30,7 @@ export class ServerModule implements ServerModuleInterface {
   public name: string;
   public config: any;
 
-  public constructor(server: Server, name = "") {
+  public constructor(server: Server, name = '') {
     this.server = server;
     this.name = name;
 
@@ -68,8 +68,11 @@ export class ServerModules {
     return this.modules.hasOwnProperty(moduleName);
   }
 
-  public getModule(moduleName: Module) {
+  public getModule(moduleName: Module): ServerModule | null {
     const module = this.modules[moduleName];
+    if (typeof module === 'undefined') {
+      return null;
+    }
     return module;
   }
 
@@ -87,7 +90,7 @@ export class ServerModules {
       }
 
       try {
-        const entry = path.join(ModulesFolder, moduleName, "index");
+        const entry = path.join(ModulesFolder, moduleName, 'index');
         const imported = await import(entry);
         await this.addModule(imported, moduleName);
       } catch (error) {
@@ -99,15 +102,15 @@ export class ServerModules {
 
   public async startAll() {
     let count = 1;
-    const moduleCount = Object.keys(this.modules).length
+    const moduleCount = Object.keys(this.modules).length;
     if (moduleCount > 0) {
-      Log.system("⏳ Starting modules:")
+      Log.system('⏳ Starting modules:');
     }
 
     for (const name in this.modules) {
       const mod = this.modules[name];
-      if (typeof mod.start === "function") {
-        Log.system(`(${count++}/${moduleCount}) Starting ${mod.name}...`)
+      if (typeof mod.start === 'function') {
+        Log.system(`(${count++}/${moduleCount}) Starting ${mod.name}...`);
         await mod.start();
       }
     }
@@ -116,11 +119,13 @@ export class ServerModules {
   }
 
   public async stopAll() {
-    for (const name in this.modules) {
+    // reverse the order of the modules.
+    const reversed = Object.fromEntries(Object.entries(this.modules).reverse());
+    for (const name in reversed) {
       const mod = this.modules[name];
-      if (typeof mod.start === "function") {
+      if (typeof mod.start === 'function') {
+        Log.system(`🛑 Stopping ${mod.name}...`);
         await mod.stop();
-        Log.system(`🛑 Stopping ${mod.name}...`)
       }
     }
   }

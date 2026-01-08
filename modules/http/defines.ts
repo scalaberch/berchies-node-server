@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-// import expressSession, { Session } from "express-session";
+import expressSession, { Session } from "express-session";
 
 export const DEFAULT_PORT = 3000;
 export const RATE_LIMIT_GLOBAL = 240;
@@ -16,12 +16,28 @@ export enum HttpRedirectCode {
 export interface HttpNext extends NextFunction {}
 
 export interface HttpRequest<T = any> extends Request {
+  removeIds?: Array<string | number>;
+  // pageQuery: EBGRequestPageQuery;
+  // jwt?: EBGJwtObject;
+  // getJWTData(): ImmutableJWTObject | CognitoJWTObject | null;
+  getImmutableData(): any;
+  // getCognitoData(): EBGCognitoObject | null;
+  getJWTString(): string;
+  useragent?: any;
+
   getQuery(key?: string, fallbackValue?: any): any;
   getBody(key?: string, fallbackValue?: any): any;
   getParam(key?: string, fallbackValue?: any): any;
 
+  getBodyFromKeys(keys: Array<string>, forcePrefillValue?: boolean): any;
+  getModelPayloadFromBody(model: any, includePrimaryKey?: boolean): any;
+
+  access?: Array<any>;
+  session?: Session;
   rawBody?: any;
   body: T
+
+  metadata?: any;
 }
 
 export interface HttpResponse extends Response {

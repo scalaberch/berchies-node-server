@@ -3,12 +3,14 @@ import express, { Express } from 'express';
 import helmet from 'helmet';
 import bodyParser from 'body-parser';
 import { express as useragent } from 'express-useragent';
-import { overrideSNSHeader, AccessLog } from './middlewares';
+import { overrideSNSHeader, AccessLog, applyRequestFunctions, applyResponseFunctions } from './middlewares';
 import { ServerModule } from '@server/modules/defines';
 import { DEFAULT_PORT, RATE_LIMIT_GLOBAL, HttpConfig } from '@server/modules/http/defines';
 import applyCors from './cors';
 import Router, { setRouteRateLimit } from './router';
 import { Log } from '@server/logs';
+import ExpressListEndpoints from 'express-list-endpoints';
+import { errorHandler } from './utils/handlers';
 
 export const PORT: number = parseInt(process.env.PORT || '') || DEFAULT_PORT;
 
@@ -54,9 +56,15 @@ const initializeServer = (config: HttpConfig) => {
     }),
   );
   server.use(useragent());
+  server.set("trust proxy", true);
+
+  // set error handling
+  server.use(errorHandler)
 
   // apply middlwares
   server.use(AccessLog);
+  server.use(applyRequestFunctions)
+  server.use(applyResponseFunctions)
 
   // apply cors
   applyCors(server, config);
@@ -65,11 +73,11 @@ const initializeServer = (config: HttpConfig) => {
   setGlobalRateLimit(server, config);
 
   // routes(server, httpModules, appModules);
-
   return server;
 };
 
 /**
+ * HTTP module
  *
  */
 export default class Http extends ServerModule {
@@ -113,5 +121,9 @@ export default class Http extends ServerModule {
         return resolve();
       });
     });
+  }
+
+  getLoadedRoutes() {
+    return ExpressListEndpoints(this.httpServer)
   }
 }
