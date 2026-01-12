@@ -1,4 +1,4 @@
-import { ServerModule } from '../defines';
+import { ServerModule } from '@server/modules/defines';
 import { Log } from '@server/logs';
 import { STRIPE_CALLBACK_URI } from './defines';
 import Http from '../http';

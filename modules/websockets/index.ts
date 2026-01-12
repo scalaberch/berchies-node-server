@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ServerModule } from '../defines';
+import { ServerModule } from '@server/modules/defines';
 import { WebSocketServer } from 'ws';
 import { Log } from '@server/logs';
 import { PORT, PING_INTERVAL, MainSocketsSrc, BasePath, WSHandler, WSAuthMethod } from './defines';

@@ -1,5 +1,5 @@
-import crypto from "crypto";
-import { v4 as uuidv4 } from "uuid";
+import crypto from 'crypto';
+import { v4 as uuidv4, v7 as uuidv7 } from 'uuid';
 
 /**
  * generate a random string
@@ -9,12 +9,12 @@ import { v4 as uuidv4 } from "uuid";
  */
 export const generateRandomString = (length: number) => {
   if (length <= 0) {
-    return "";
+    return '';
   }
 
   return crypto
     .randomBytes(Math.ceil(length / 2))
-    .toString("hex")
+    .toString('hex')
     .slice(0, length);
 };
 
@@ -35,7 +35,7 @@ export const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test
 export const makePossessive = (name: string) => {
   if (!name) return name;
   const lastChar = name.charAt(name.length - 1).toLowerCase();
-  return lastChar === "s" ? `${name}'` : `${name}'s`;
+  return lastChar === 's' ? `${name}'` : `${name}'s`;
 };
 
 /**
@@ -44,7 +44,14 @@ export const makePossessive = (name: string) => {
  *
  * @returns
  */
-export const generateUUID = () => uuidv4();
+export const generateUUID = (): string => uuidv4();
+
+/**
+ * generates a v7 UUID. good for primary keys and stuff
+ *
+ * @returns
+ */
+export const generateUUID7 = (): string => uuidv7();
 
 /**
  * hides middle content of a string with the padded characters showing
@@ -79,7 +86,7 @@ export const isValidJSONString = (jsonString: string) => {
 
   try {
     let json = JSON.parse(jsonString);
-    let validity = json && typeof json === "object";
+    let validity = json && typeof json === 'object';
     return validity;
   } catch (e) {
     return false;
@@ -97,9 +104,17 @@ export const slugify = (str: string) =>
   str
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+/**
+ * identify if a string is camel case or not.
+ *
+ * @param str
+ * @returns
+ */
+export const isCamelCase = (str: string) => /^[a-z][a-zA-Z0-9]*$/.test(str);
 
 /**
  * converts camel case to snake case
@@ -138,20 +153,20 @@ export const isStringIsSnakeCase = (str: string) => /^[a-z]+(_[a-z]+)*$/.test(st
 export function camelCaseToSentence(
   string: string,
   forceToLowerCase = false,
-  appendPeriod = false
+  appendPeriod = false,
 ) {
-  const result = string.replace(/([A-Z])/g, " $1");
+  const result = string.replace(/([A-Z])/g, ' $1');
   let sentence = result
-    .split(" ")
+    .split(' ')
     .map((word) => word[0].toUpperCase() + word.substring(1))
-    .join(" ");
+    .join(' ');
 
   if (forceToLowerCase) {
     sentence = sentence.toLowerCase();
   }
 
   if (appendPeriod) {
-    sentence += ".";
+    sentence += '.';
   }
 
   return sentence;
@@ -166,7 +181,7 @@ export function camelCaseToSentence(
  * @returns
  */
 export function padWithZeros(num: number, totalLength: number): string {
-  return String(num).padStart(totalLength, "0");
+  return String(num).padStart(totalLength, '0');
 }
 
 /**
@@ -176,7 +191,7 @@ export function padWithZeros(num: number, totalLength: number): string {
  * @returns
  */
 export const encodeBase64String = (inputString: string) =>
-  Buffer.from(inputString, "utf8").toString("base64");
+  Buffer.from(inputString, 'utf8').toString('base64');
 
 /**
  * decodes a base 64 string to normal string
@@ -185,7 +200,7 @@ export const encodeBase64String = (inputString: string) =>
  * @returns
  */
 export const decodeBase64String = (base64String: string) =>
-  Buffer.from(base64String, "base64").toString("utf8");
+  Buffer.from(base64String, 'base64').toString('utf8');
 
 /**
  * checks if a string is a valid url string
@@ -204,30 +219,30 @@ export const isValidUrl = (url: string) => {
 
 /**
  * formats name components into a full name string
- * 
- * @param firstName 
- * @param lastName 
- * @param middleName 
- * @param forceUpperCase 
- * @returns 
+ *
+ * @param firstName
+ * @param lastName
+ * @param middleName
+ * @param forceUpperCase
+ * @returns
  */
 export const formatFullName = (
   firstName: string,
   lastName: string,
-  middleName = "",
-  forceUpperCase = false
+  middleName = '',
+  forceUpperCase = false,
 ) => {
   const name = [firstName, middleName, lastName]
     .map((str) => str.trim())
     .filter((str) => str.length > 0)
-    .join(" ");
+    .join(' ');
 
   return forceUpperCase ? name.toUpperCase() : name;
 };
 
 /**
  * check if string has bad words
- * 
+ *
  * @param string
  * @returns
  */
@@ -241,7 +256,7 @@ export const stringHasBadWords = (string: string) => false; // hasBadWords(strin
  */
 export const capitalizeString = (str: string) => {
   if (str.length === 0) {
-    return "";
+    return '';
   }
   if (str.length === 1) {
     return str.toUpperCase();
