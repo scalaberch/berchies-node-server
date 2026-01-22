@@ -1,6 +1,6 @@
 import { getEnvVariable } from '@server/env';
 
-export const CACHE_HOST = getEnvVariable('REDIS_HOST', false, '127.0.0.1') as string;
+export let CACHE_HOST = getEnvVariable('REDIS_HOST', false, '127.0.0.1') as string;
 export const CACHE_USER = getEnvVariable('REDIS_USER', false, '');
 export const CACHE_PASS = getEnvVariable('REDIS_PASSWORD', false, '') as string;
 export const CACHE_PORT = getEnvVariable('REDIS_PORT', true, 6379) as number;
@@ -18,3 +18,4 @@ export interface RedisSetOptions {
   KEEPTTL?: boolean; // retain the TTL associated with the key
   GET?: boolean; // return the old string stored at key, or "undefined" if key did not exist
 }
+

@@ -2,10 +2,17 @@ import _ from 'lodash';
 import moment from 'moment-timezone';
 import { cache, isCacheActive } from '@server/modules/cache';
 import { getEnvVariable as getEnv, getEnvVariable, isDevEnv } from '../../env';
-import jwt, { TokenExpiredError, JsonWebTokenError, NotBeforeError } from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
-import { JWTKind, algorithm, invalidRefreshTokenPrefix, invalidAccessTokenPrefix } from './defines';
-import { Log } from '@server/logs';
+import jwt, { Algorithm } from 'jsonwebtoken';
+import {
+  JWTKind,
+  algorithm,
+  invalidRefreshTokenPrefix,
+  invalidAccessTokenPrefix,
+  BaseJWTPayload,
+} from './defines';
+import Log from '@server/logs';
+import { generateUUID7 } from '@server/lib/strings';
+import { DateTimeFormats, getCurrentTimestamp } from '@server/lib/datetime';
 
 // tokens and expiry configuration
 export const ACCESS_SECRET: string = getEnv('JWT_ACCESS_SECRET', false, '');
@@ -126,6 +133,46 @@ export const verifyAccessToken = (token: string) => jwt.verify(token, ACCESS_SEC
 export const verifyRefreshToken = (token: string) => jwt.verify(token, REFRESH_SECRET);
 
 /**
+ * generates a jwt
+ *
+ * @param secret
+ * @param algorithm
+ * @param expiresIn
+ * @param sub - the user id
+ * @param issuer - issuer url
+ * @param audience - target audience
+ * @param payload - extra payload data. force it to be {} if nothing
+ * @returns
+ */
+export const generateToken = (
+  secret = '',
+  algorithm: Algorithm = 'HS256',
+  expiresIn = 0,
+  sub: string | number,
+  issuer = 'http://localhost',
+  audience = '',
+  payload = {},
+) => {
+  const jti = generateUUID7();
+  const token: string = jwt.sign(
+    {
+      jti,
+      sub,
+      iss: issuer,
+      aud: audience,
+      ...payload,
+    },
+    secret,
+    {
+      algorithm,
+      expiresIn,
+    },
+  ) as string;
+
+  return { jti, token };
+};
+
+/**
  * generates a jwt access token
  *
  * @param sub - the user id
@@ -139,26 +186,7 @@ export const generateAccessToken = (
   payload = {},
   issuer = 'http://localhost',
   audience = '',
-) => {
-  const jti = uuidv4();
-  const token = jwt.sign(
-    {
-      jti,
-      sub,
-      iss: issuer,
-      aud: audience,
-      ...payload,
-    },
-    ACCESS_SECRET,
-    {
-      algorithm,
-      expiresIn: ACCESS_EXPIRY,
-      notBefore: '0s',
-    },
-  );
-
-  return { jti, token };
-};
+) => generateToken(ACCESS_SECRET, algorithm, ACCESS_EXPIRY, sub, issuer, audience, payload);
 
 /**
  * generates a jwt refresh token
@@ -174,26 +202,7 @@ export const generateRefreshToken = (
   payload = {},
   issuer = 'http://api.localhost',
   audience = '',
-) => {
-  const jti = uuidv4();
-  const token = jwt.sign(
-    {
-      jti,
-      sub,
-      iss: issuer,
-      aud: audience,
-      ...payload,
-    },
-    REFRESH_SECRET,
-    {
-      algorithm,
-      expiresIn: REFRESH_EXPIRY,
-      notBefore: '0s',
-    },
-  );
-
-  return { jti, token };
-};
+) => generateToken(REFRESH_SECRET, algorithm, REFRESH_EXPIRY, sub, issuer, audience, payload);
 
 /**
  * generates the issuer data based on current domain data.
@@ -203,6 +212,7 @@ export const generateRefreshToken = (
 export const getIssuer = () => {
   const domain = getEnvVariable('DOMAIN', false, 'localhost') as string;
   if (isDevEnv()) {
+    // @todo: make this something "generic". duh.
     return `http${FORCE_ISSUER_HTTPS ? 's' : ''}://creeperbot-node.localhost`;
   }
 
@@ -301,3 +311,82 @@ export const makeAccessTokenInvalid = (accessToken: string) =>
  */
 export const makeRefreshTokenInvalid = (refreshToken: string) =>
   makeTokenInvalid(refreshToken, JWTKind.access);
+
+/**
+ * calculates the remaining time of a jwt data
+ *
+ * @param jwtData
+ * @returns
+ */
+export const calculateRemainingTime = (jwtData: Partial<BaseJWTPayload>) => {
+  const now = Number(getCurrentTimestamp(DateTimeFormats.seconds));
+  const { exp } = jwtData;
+  const remaining = exp - now;
+  return remaining > 0 ? remaining : 0;
+};
+
+export const generateNewAccessTokenFromRefreshToken = async (
+  refreshToken: string | Partial<BaseJWTPayload> = '',
+  payload = {},
+) => {
+  if (typeof refreshToken === 'string') {
+    const validatedRefreshToken = await validateRefreshToken(refreshToken);
+    if (!validatedRefreshToken.valid) {
+      // refresh token is not valid!
+      return '';
+    }
+
+    refreshToken = validatedRefreshToken.data;
+  }
+
+  const { sub, iss, aud } = refreshToken as Partial<BaseJWTPayload>;
+  const { token: accessToken } = generateAccessToken(sub, { ...payload }, iss, aud);
+  return accessToken;
+};
+
+export class JWTAuthClass {
+  private accessToken: string;
+  private refreshToken: string;
+  private valid: boolean;
+
+  constructor() {
+    this.accessToken = '';
+    this.refreshToken = '';
+    this.valid = false;
+  }
+
+  getAccessToken() {
+    return this.accessToken;
+  }
+
+  getRefreshToken() {
+    return this.refreshToken;
+  }
+
+  toObject() {}
+
+  isAccessTokenExpired() {}
+
+  isRefreshTokenExpired() {}
+
+  generate(payload = {}) {}
+
+  refresh(payload = {}) {
+    // const { jti, sub, iss, player, aud } = refreshTokenData;
+    // // Issue access token.
+    // const { token: accessToken, jti: accessJti } = generateAccessToken(
+    //   sub,
+    //   payload,
+    //   iss,
+    //   aud,
+    // );
+    // return accessToken;
+  }
+
+  private calculateRemainingTime(jwtData: BaseJWTPayload) {
+    const now = Number(getCurrentTimestamp(DateTimeFormats.seconds));
+    const { exp } = jwtData;
+    const remaining = exp - now;
+    return remaining > 0 ? remaining : 0;
+  }
+}

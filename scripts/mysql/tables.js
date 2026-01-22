@@ -1,11 +1,11 @@
-const _ = require("lodash");
-const fs = require("fs");
-const path = require("path");
-const mysql = require("mysql2/promise");
+const _ = require('lodash');
+const fs = require('fs');
+const path = require('path');
+const mysql = require('mysql2/promise');
 
-require("dotenv").config();
+require('dotenv').config();
 
-const timestampFields = ["created_at", "updated_at", "deleted_at"];
+const timestampFields = ['created_at', 'updated_at', 'deleted_at'];
 
 const classTemplate = `/**
 *
@@ -15,25 +15,30 @@ const classTemplate = `/**
 **/
 
 import { <modelName> as BaseInterface } from '../mysql.defines';
-import MysqlTable, { PrimaryKeyType } from "@server/modules/mysql/table";
+import MysqlTable, { PrimaryKeyType, MysqlInsertResult, TableName } from "@server/modules/mysql/table";
 
 export const tableName = "<tableName>";
 export const tablePrimaryKey = "<primaryKey>";
 
-export interface <modelName>Interface extends Partial<BaseInterface> {
-}
+export interface <modelName>Interface extends Partial<BaseInterface> {}
 export type <modelName>Field = keyof <modelName>Interface;
 
-export class <modelName>Table extends MysqlTable {
-  protected fields: <modelName>Field[] = <fields>;  
+export class <modelName>MysqlTable extends MysqlTable {
   protected primaryKeyType: PrimaryKeyType = '<pkType>';
+  protected fields: <modelName>Field[] = <fields>;
+  protected uuidFields: <modelName>Field[] = [<uuidFields>];
+  protected foreignKeys: Record<string, TableName> = {<fks>};
 
-  //public create(params: <modelName>Interface): Promise<<modelName>Interface | null> {
-  //  return super.create(params)
-  //}
+  public insert(params: <modelName>Interface): Promise<MysqlInsertResult> {
+   return super.insert(params)
+  }
 
-  //public update(id: PrimaryKeyType, params: <modelName>Interface) {
-  //  return super.update(id, params)
+  public create(params: <modelName>Interface): Promise<<modelName>Interface | null> {
+   return super.create(params)
+  }
+
+  //public updateById(id: PrimaryKeyType, params: <modelName>Interface) {
+  // return super.update(id, params)
   //}
 
   //public getByField(field: <modelName>Field, value: any, selectFields: <modelName>Field[] = []): Promise<<modelName>Interface | null> {
@@ -57,8 +62,8 @@ export class <modelName>Table extends MysqlTable {
   //}
 }
 
-const <modelName>Model = new <modelName>Table(tableName, tablePrimaryKey);
-export default <modelName>Model;
+const <modelName>Table = new <modelName>MysqlTable(tableName, tablePrimaryKey);
+export default <modelName>Table;
 `;
 
 /**
@@ -68,12 +73,23 @@ export default <modelName>Model;
 async function generateClassContent(classObject) {
   const { modelName, tableName, primaryKey, fieldDefines, columns } = classObject;
 
-  const fields = Object.keys(fieldDefines);
-  let classContent = classTemplate.replaceAll("<modelName>", modelName);
-  classContent = classContent.replaceAll("<primaryKey>", primaryKey);
-  classContent = classContent.replaceAll("<tableName>", tableName);
-  classContent = classContent.replaceAll("<fields>", JSON.stringify(fields));
+  // console.log(classObject)
 
+  const fields = Object.keys(fieldDefines);
+  let classContent = classTemplate.replaceAll('<modelName>', modelName);
+  classContent = classContent.replaceAll('<primaryKey>', primaryKey);
+  classContent = classContent.replaceAll('<tableName>', tableName);
+
+  // generate the fields stuff properly.
+  const fieldsStrList = fields.reduce((str, fld, index) => {
+    let newStr = index === 0 ? `` : `,`;
+    newStr += `\n\t\t'${fld}'`;
+    return str + newStr;
+  }, '');
+  const fieldsStr = `[${fieldsStrList}\n\t]`;
+  classContent = classContent.replaceAll('<fields>', fieldsStr);
+
+  // identify the generated fields and set a field map
   const regex = /^Generated<([^,]+(?:,[^,]+)*)>$/;
   const fieldMap = fields.reduce((mapObj, field) => {
     let fieldType = `${fieldDefines[field]}`;
@@ -87,23 +103,30 @@ async function generateClassContent(classObject) {
     return { ...mapObj, [field]: fieldType };
   }, {});
 
+  // identify primary key type
   let pkType = fieldMap[primaryKey];
-  if (pkType === "Buffer") {
-    pkType = "uuid";
+  if (pkType === 'Buffer') {
+    pkType = 'uuid';
   }
+  classContent = classContent.replaceAll('<pkType>', pkType);
+  classContent = classContent.replaceAll('<isUuid>', pkType === 'string' || pkType === 'uuid');
 
-  classContent = classContent.replaceAll("<pkType>", pkType);
-  classContent = classContent.replaceAll("<isUuid>", pkType === "string" || pkType === "uuid");
+  // add uuid fields here
+  // uuidFields
+  classContent = classContent.replaceAll('<uuidFields>', '');
+
+  // add foreign keys here
+  classContent = classContent.replaceAll('<fks>', '');
 
   // setup helper creaters
   const columnParams = columns.filter(
-    (column) => column !== primaryKey && timestampFields.indexOf(column) < 0
+    (column) => column !== primaryKey && timestampFields.indexOf(column) < 0,
   );
   const paramChain = columnParams.map((column) => {
     return `${column}?: ${fieldMap[column]}`;
   });
-  classContent = classContent.replaceAll("<paramChain>", paramChain.join(", "));
-  classContent = classContent.replaceAll("<paramColumns>", columnParams.join(", "));
+  classContent = classContent.replaceAll('<paramChain>', paramChain.join(', '));
+  classContent = classContent.replaceAll('<paramColumns>', columnParams.join(', '));
 
   // Write to file.
   const fileName = `${modelName.toLowerCase()}Table.ts`;
@@ -111,9 +134,14 @@ async function generateClassContent(classObject) {
   fs.writeFileSync(filePath, classContent);
 }
 
+/**
+ *
+ * @param {*} definesFilePath
+ * @returns
+ */
 function getTableMap(definesFilePath) {
   // Extract table interfaces using a regular expression
-  const definesContent = fs.readFileSync(definesFilePath, "utf8");
+  const definesContent = fs.readFileSync(definesFilePath, 'utf8');
   const tableRegex = /export interface (\w+) {([\s\S]*?)}/g;
 
   const modelMap = {};
@@ -122,7 +150,7 @@ function getTableMap(definesFilePath) {
 
   while ((match = tableRegex.exec(definesContent)) !== null) {
     const [tableMatch, tableName, tableFields] = match;
-    const isMainDb = tableName === "DB";
+    const isMainDb = tableName === 'DB';
 
     // Extract field names
     const fieldRegex = /(\w+):\s*(.+?);/g;
@@ -160,12 +188,12 @@ function getTableMap(definesFilePath) {
  * @param {*} tableName
  * @returns
  */
-async function getTablePrimaryKey(connection, tableName = "") {
-  let primaryKey = "";
+async function getTablePrimaryKey(connection, tableName = '') {
+  let primaryKey = '';
 
   try {
     const [primaryKeyResult] = await connection.execute(
-      `SHOW KEYS FROM ${tableName.trim()} WHERE Key_name = 'PRIMARY'`
+      `SHOW KEYS FROM ${tableName.trim()} WHERE Key_name = 'PRIMARY'`,
     );
     if (primaryKeyResult.length > 0) {
       primaryKey = primaryKeyResult[0].Column_name;
@@ -183,15 +211,13 @@ async function getTablePrimaryKey(connection, tableName = "") {
  * @param {*} tableName
  * @returns
  */
-async function getColumnsOfTable(connection, tableName = "") {
+async function getColumnsOfTable(connection, tableName = '') {
   const columns = [];
 
   try {
-    const [tablesResult] = await connection.execute(
-      `SHOW COLUMNS FROM ${tableName.trim()}`
-    );
-
+    const [tablesResult] = await connection.execute(`SHOW COLUMNS FROM ${tableName.trim()}`);
     return tablesResult.map((table) => {
+      console.log(table);
       return table.Field;
     });
   } catch (dbError) {
@@ -210,14 +236,12 @@ async function getColumnsOfTable(connection, tableName = "") {
  * @returns
  */
 async function generateTableClasses(definesFilePath, outputDir, dbConfig) {
-  // Added dbConfig parameter back
-
   // Get the field maps
   let tableFieldMap = {};
   try {
     tableFieldMap = getTableMap(definesFilePath);
   } catch (error) {
-    console.error("Error generating table classes:", error);
+    console.error('Error generating table classes:', error);
     return false;
   }
 
@@ -254,7 +278,7 @@ async function generateTableClasses(definesFilePath, outputDir, dbConfig) {
  */
 function isRunningInDocker() {
   try {
-    const cgroup = fs.readFileSync("/proc/1/cgroup", "utf8");
+    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
     return /docker|kubepods/.test(cgroup); // Checks for Docker or Kubernetes references
   } catch (err) {
     return false; // If reading /proc/1/cgroup fails, assume not inside Docker
@@ -265,8 +289,8 @@ function isRunningInDocker() {
  * executable variables
  *
  */
-const definesFilePath = "./src/models/mysql.defines.ts";
-const outputDir = "./src/models/tables";
+const definesFilePath = './src/database/mysql.defines.ts';
+const outputDir = './src/database/tables';
 const dbConfig = {
   host: process.env.MYSQL_HOST,
   user: process.env.MYSQL_USER,
@@ -275,9 +299,9 @@ const dbConfig = {
   port: process.env.MYSQL_PORT,
 };
 
-if (process.env.ENV === "dev") {
+if (process.env.ENV === 'dev') {
   if (!isRunningInDocker()) {
-    dbConfig.host = "127.0.0.1";
+    dbConfig.host = '127.0.0.1';
   }
 }
 

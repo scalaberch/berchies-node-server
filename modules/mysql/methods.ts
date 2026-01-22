@@ -1,4 +1,5 @@
-import { Log } from '@server/logs';
+import Log from '@server/logs';
+import mysql from 'mysql2/promise';
 import { camelCaseToSnakeCase, isCamelCase } from '@server/lib/strings';
 import { Kysely, sql, WhereParameters } from './defines';
 import {
@@ -9,11 +10,11 @@ import {
   RawBuilder,
 } from 'kysely';
 
-export type QuerySort = "asc" | "desc"
+export type QuerySort = 'asc' | 'desc';
 
 export type SortCondition = {
   [key: string]: QuerySort;
-}
+};
 
 export type UniversalBuilder =
   | SelectQueryBuilder<any, any, any>
@@ -48,6 +49,24 @@ const OperatorMap: Record<string, string> = {
   $lte: '<=',
   $like: 'like',
   $in: 'in',
+};
+
+/**
+ * create a mysql connection
+ *
+ * @param host
+ * @param user
+ * @param password
+ * @returns
+ */
+export const createMysqlConnection = async (host = '127.0.0.1', user = 'mysql', password = '') => {
+  const connection = await mysql.createConnection({
+    host,
+    user,
+    password,
+  });
+
+  return connection;
 };
 
 /**
@@ -179,7 +198,6 @@ export const executeRawQuery = async <T>(
       caller,
       durationMs: end - start,
     };
-
   } catch (err) {
     Log.error(`Error executing raw query: `, err);
     throw err;
@@ -193,7 +211,92 @@ export const executeRawQuery = async <T>(
   //   console.error('Error executing raw query:', err);
   //   throw err;
   // }
+};
 
+/**
+ * copy schema from a db to another
+ *
+ * @param connection
+ * @param sourceDb
+ * @param targetDb
+ */
+export const copySchema = async (
+  connection: mysql.Connection,
+  sourceDb: string,
+  targetDb: string,
+) => {
+  try {
+    // 1. Disable FK checks to avoid "table doesn't exist" errors during creation
+    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+
+    // 2. Get all tables from the source
+    const [tables]: any = await connection.query(
+      'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = "BASE TABLE"',
+      [sourceDb],
+    );
+
+    for (const row of tables) {
+      const tableName = row.TABLE_NAME;
+
+      // 3. Get the original CREATE statement
+      // We use backticks to ensure special characters in names don't break the query
+      const [createResult]: any = await connection.query(
+        `SHOW CREATE TABLE \`${sourceDb}\`.\`${tableName}\``,
+      );
+      const createSql = createResult[0]['Create Table'];
+
+      // 4. Clean start for the target table
+      await connection.query(`DROP TABLE IF EXISTS \`${targetDb}\`.\`${tableName}\``);
+
+      // 5. Direct the CREATE statement to the target DB
+      // We replace the start of the string to point to targetDb
+      const redirectedSql = createSql.replace(/CREATE TABLE `/, `CREATE TABLE \`${targetDb}\`.\``);
+      await connection.query(redirectedSql);
+      // console.log(`Successfully copied structure for: ${tableName}`);
+    }
+
+    // 6. Re-enable FK checks
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+  } catch (error) {
+    console.error('Error copying schema:', error);
+    throw error;
+  }
+};
+
+/**
+ * wipe whole data from database. BE CAREFUL ABOUT THIS! DO NOT USE ROOT, duh.
+ *
+ * @param connection
+ * @param dbName
+ */
+export const wipeDatabase = async (connection: mysql.Connection, dbName: string) => {
+  try {
+    // 1. Disable Foreign Key checks so we can wipe tables in any order
+    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+
+    // 2. Get all table names from the target database
+    const [tables]: any = await connection.query(
+      'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = "BASE TABLE"',
+      [dbName],
+    );
+
+    // 3. Loop through and truncate each one
+    for (const row of tables) {
+      const tableName = row.TABLE_NAME;
+      // Skip the migration table so you don't have to re-run migrations
+      if (tableName === 'kysely_migration' || tableName === '_migrations') continue;
+
+      await connection.query(`TRUNCATE TABLE \`${dbName}\`.\`${tableName}\``);
+    }
+
+    // 4. Re-enable Foreign Key checks
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+
+    console.log(`🧹 Database ${dbName} wiped clean.`);
+  } catch (error) {
+    console.error('❌ Error wiping database:', error);
+    throw error;
+  }
 };
 
 /**
@@ -231,16 +334,19 @@ export function applyDynamicFilters(
 }
 
 /**
- * 
- * @param query 
- * @param sortCondition 
- * @returns 
+ *
+ * @param query
+ * @param sortCondition
+ * @returns
  */
-export function applyDynamicSorts(query: UniversalBuilder, sortCondition: SortCondition): UniversalBuilder {
+export function applyDynamicSorts(
+  query: UniversalBuilder,
+  sortCondition: SortCondition,
+): UniversalBuilder {
   let sortedQuery: any = query;
 
   for (const [key, sortValue] of Object.entries(sortCondition)) {
-    sortedQuery = sortedQuery.orderBy(key, sortValue)
+    sortedQuery = sortedQuery.orderBy(key, sortValue);
   }
 
   return sortedQuery as UniversalBuilder;

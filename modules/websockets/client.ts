@@ -3,8 +3,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { WSAuthMethod } from './defines';
 import { IncomingMessage } from 'http';
 import WebSocketAuth, { setupJwtTimeout } from './auth';
-import { Log } from '@server/logs';
-import Websockets from './index';
+import Log from '@server/logs';
+import { Websockets } from './index';
+import { HttpRequest } from '../http/defines';
 
 export enum WSClientStatus {
   'normal' = 1000,
@@ -28,14 +29,17 @@ export interface WSMessageOut {
 export default class WebsocketClient {
   public id: string;
   public socket: WebSocket;
+  public module: Websockets;
+
   public user: any;
   public isAlive: boolean;
   public metadata: any;
   public ipAddress;
   public authData;
 
-  constructor(socket: WebSocket, ipAddress = '::1') {
+  constructor(module: Websockets, socket: WebSocket, ipAddress = '::1') {
     this.id = generateUUID();
+    this.module = module;
     this.socket = socket;
     this.isAlive = false;
     this.metadata = {};
@@ -48,8 +52,6 @@ export default class WebsocketClient {
 
     // add the on close handler for now
     this.socket.on('close', async () => {
-      // console.log('closing socket');
-
       if (socketModule.handler?.onClose) {
         await socketModule.handler.onClose(parent);
       }
@@ -75,11 +77,29 @@ export default class WebsocketClient {
     return readyState === WebSocket.OPEN;
   }
 
-  public async send(data: Partial<WSMessageOut>) {
-    if (this.isOpen()) {
-      const stringData = JSON.stringify(data);
-      this.socket.send(stringData);
+  public send(data: Partial<WSMessageOut>) {
+    return this.sendMessage(data);
+  }
+
+  private sendMessage(data: any = null) {
+    // check if message is empty
+    if (data === null) {
+      return false;
     }
+    // check if socket client is open
+    if (!this.isOpen()) {
+      return false;
+    }
+
+    // prepare message
+    const stringData = JSON.stringify(data);
+    if (this.module.encryptedMessages) {
+      // @todo: encrypt string data
+    }
+
+    // then send it
+    this.socket.send(stringData);
+    return true;
   }
 
   public ping() {
@@ -107,7 +127,7 @@ export default class WebsocketClient {
     this.isAlive = alive;
   }
 
-  public async authenticate(authMethod: WSAuthMethod, req: IncomingMessage) {
+  public async authenticate(authMethod: WSAuthMethod, req: HttpRequest) {
     switch (authMethod) {
       case 'jwt':
         const { valid, message, error, errorType, data } = await WebSocketAuth.jwt(req);
@@ -120,7 +140,7 @@ export default class WebsocketClient {
         this.authData = data;
 
         // then handle timeout notification to the socket
-        this.metadata.jwtTimeout = setupJwtTimeout(this, data);
+        this.metadata.jwtTimeout = setupJwtTimeout(this, data, req);
 
         return true;
       default:
@@ -129,29 +149,5 @@ export default class WebsocketClient {
     }
   }
 }
-
-export const handleOnMessageClient = async (
-  client: WebsocketClient,
-  data: string,
-  socketModule: Websockets,
-) => {
-  const message = data.toString();
-
-  try {
-    const data: WSMessageIn = JSON.parse(message);
-    const type = data?.type || '';
-
-    if (type === 'ping') {
-      client.send({ response: 'pong' });
-      return;
-    }
-
-    if (socketModule.handler?.onMessage) {
-      await socketModule.handler.onMessage(client, data);
-    }
-  } catch (error) {
-    Log.error('Invalid parsing websocket message: ', error);
-  }
-};
 
 export { IncomingMessage };

@@ -42,15 +42,16 @@ fi
 DATABASE_URL="mysql://${credentials}@${DB_HOST}/${MYSQL_DATABASE}"
 
 # check if there is a config file for kysely and if not exists, create it!
-if [[ -f "src/models/mysql.defines.ts" ]]; then
-  rm src/models/mysql.defines.ts
+if [[ -f "src/database/mysql.defines.ts" ]]; then
+  rm src/database/mysql.defines.ts
 fi
 
-npx kysely-codegen --url="$DATABASE_URL" --dialect="mysql" --out-file="./src/models/mysql.defines.ts" --singularize --log-level="silent"
+# generate the db definition
+npx kysely-codegen --url="$DATABASE_URL" --dialect="mysql" --out-file="./src/database/mysql.defines.ts" --singularize --log-level="silent"
 node ./server/scripts/mysql/clean-generated.js
 
 # create the table folders if it doesn't exist.
-mkdir -p ./src/models/tables
+mkdir -p ./src/database/tables
 
-# # run the table generator
+# run the table generator
 node ./server/scripts/mysql/tables.js

@@ -1,13 +1,6 @@
-import {
-  MysqlTableKeysArray,
-  sql,
-  DEFAULT_SELECT_LIMIT,
-  OperatorMap,
-  PaginationResult,
-  PaginationSettings,
-} from '../defines';
-import { generateUUID7 } from '@server/lib/strings';
-import { mysql } from '..';
+import { sql, OperatorMap, PaginationResult, PaginationSettings } from '../defines';
+import { binToUuid, generateUUID7, uuidToBin } from '@server/lib/strings';
+import Mysql from '../index';
 import {
   applyDynamicFilters,
   applyDynamicSorts,
@@ -22,16 +15,34 @@ import {
   DeleteQueryBuilder,
   RawBuilder,
 } from 'kysely';
+
 import MysqlTableEntry from './entry';
 import { getCurrentTimestamp } from '@server/lib/datetime';
+import {
+  DEFAULT_SELECT_LIMIT,
+  MysqlInsertResult,
+  PrimaryKeyType,
+  TableFieldsArray,
+  TableName,
+} from './defines';
 
-export type PrimaryKeyType = 'number' | 'string' | 'uuid';
+/**
+ * proxy exports
+ *
+ */
+export type { MysqlInsertResult, PrimaryKeyType, TableFieldsArray, TableName };
 
+/**
+ * this is the main sql table class wrapper.
+ *
+ */
 export default class MysqlTable {
   private primaryKey: string = '';
   private tableName: string = '';
   private alias: string = '';
-  protected fields: MysqlTableKeysArray = [];
+  protected fields: TableFieldsArray = [];
+  protected uuidFields: TableFieldsArray = [];
+  protected foreignKeys: Record<string, TableName> = {};
 
   protected primaryKeyType: PrimaryKeyType = 'number';
   protected enableTimestamps: boolean = false;
@@ -45,22 +56,47 @@ export default class MysqlTable {
     this.alias = alias;
   }
 
+  /**
+   * returns the table name
+   *
+   * @returns
+   */
   getTableName() {
     return this.tableName;
   }
 
+  /**
+   * returns the primary key name
+   *
+   * @returns
+   */
   getPrimaryKey() {
     return this.primaryKey;
   }
 
+  /**
+   * lists the fields of the table
+   *
+   * @returns
+   */
   getFields() {
     return this.fields;
   }
 
+  /**
+   * outputs the current mysql db instance. this is reliant on the main module proxy.
+   *
+   * @returns
+   */
   db() {
-    return mysql();
+    return Mysql;
   }
 
+  /**
+   * check if primary key is uuid
+   *
+   * @returns {boolean}
+   */
   public isPrimaryKeyUUID() {
     return this.primaryKeyType === 'uuid';
   }
@@ -99,6 +135,24 @@ export default class MysqlTable {
    */
   public createDeleteQuery() {
     return this.db().getDb().deleteFrom(this.getTableName());
+  }
+
+  /**
+   * gets the current table count.
+   *
+   * @param qb - optional. if needed to be used with a query builder, just pass the existing query builder.
+   * @returns
+   */
+  public async getTableCount(qb: SelectQueryBuilder<any, any, any> = null) {
+    if (qb === null) {
+      qb = this.select();
+    }
+
+    const tq = qb.select([sql`COUNT(*)`.as('totalDocs')]);
+    const tqResult = await tq.executeTakeFirst();
+    const totalDocs = tqResult.totalDocs ? Number(tqResult.totalDocs) : 0;
+
+    return totalDocs;
   }
 
   /**
@@ -186,41 +240,49 @@ export default class MysqlTable {
   }
 
   /**
+   * Pure helper to decorate the input data with UUIDs and Timestamps
+   */
+  private prepareInsertRecord(input: any, uuid: string): Record<string, any> {
+    const now = getCurrentTimestamp();
+    const record = { ...this.buildParameters(input) };
+    const pk = this.getPrimaryKey();
+
+    // Primary Key Injection
+    if (this.isPrimaryKeyUUID()) {
+      record[pk] = this.db().sql(`UUID_TO_BIN('${uuid}')`);
+    }
+
+    // Automated Timestamps
+    if (this.isValidField(this.createdTimestampFld)) record[this.createdTimestampFld] = now;
+    if (this.isValidField(this.updatedTimestampFld)) record[this.updatedTimestampFld] = now;
+
+    return record;
+  }
+
+  /**
    * executes an insert query
    *
    * @param parameters
    * @returns
    */
-  public async insert(parameters: any) {
+  public async insert<T extends Record<string, any>>(parameters: T): Promise<MysqlInsertResult> {
     const db = this.db().getDb();
-    const insertParameters = this.buildParameters(parameters);
-
-    // Automatically add something in the primary key
+    const uuid = generateUUID7();
     const pk = this.getPrimaryKey();
-    insertParameters[pk] = this.isPrimaryKeyUUID()
-      ? this.db().sql(`UUID_TO_BIN('${generateUUID7()}')`)
-      : null;
 
-    // automatically set insert and updated timestamps if exists.
-    // maybe do this later?
-
-    // create insert statement
-    const qb = db.insertInto(this.getTableName()).values(insertParameters);
-    const { insertId: newId, numInsertedOrUpdatedRows } = await qb.executeTakeFirst();
-
-    // insert results
-    const insertId = typeof newId === 'undefined' ? insertParameters[pk] : newId.toString();
-    const isCreated = Number(numInsertedOrUpdatedRows) > 0;
+    const record = this.prepareInsertRecord(parameters, uuid);
+    const result = await db.insertInto(this.getTableName()).values(record).executeTakeFirst();
+    const insertId = this.isPrimaryKeyUUID() ? uuid : (result.insertId?.toString() ?? record[pk]);
 
     return {
       insertId,
-      insertParameters,
-      isCreated,
+      insertParameters: record,
+      isCreated: Number(result.numInsertedOrUpdatedRows) > 0,
     };
   }
 
   /**
-   * creates a new entry
+   * creates a new entry. it does the insert and then fetch the entry (so 2 sql ops)
    *
    * @param parameters
    * @returns
@@ -231,18 +293,9 @@ export default class MysqlTable {
       return null;
     }
 
-    // // get the data.
-    // const newEntry = await this.createSelectQuery()
-    //   .where(this.getPrimaryKey(), "=", insertData?.insertId)
-    //   .selectAll()
-    //   .executeTakeFirst();
-
-    // if (newEntry === undefined) {
-    //   return null;
-    // }
-
-    // return newEntry;
-    return null;
+    // fetch data
+    const newEntry = await this.selectById(insertData?.insertId);
+    return newEntry;
   }
 
   /**
@@ -303,37 +356,36 @@ export default class MysqlTable {
     // append the limit
     selectStmt = selectStmt.limit(limit);
 
-    const comple = selectStmt.compile();
-    console.log(comple.sql);
-    console.log(comple.parameters);
-
     // run said query
     const results = await selectStmt.execute();
     return results; // selectStmt.compile().sql;
   }
 
   /**
-   * select a single entry by a single field.
+   * select by a single field.
    *
    * @param fieldName
    * @param value
    * @param selectFields
+   * @param pickSingle - true if just to select a single entry, false if to return all entries
    */
   public async selectByField(
     fieldName: string,
     value: any,
     selectFields = [],
+    pickSingle = false,
   ): Promise<any | null> {
     if (!this.isValidField(fieldName)) {
       return null;
     }
 
     const queryResults = await this.selectWhere({ [fieldName]: value }, selectFields);
-    if (queryResults.length === 0) {
-      return null;
+    if (!pickSingle) {
+      return queryResults;
     }
 
-    return queryResults[0];
+    const [firstRecord] = queryResults;
+    return firstRecord ?? null;
   }
 
   /**
@@ -344,7 +396,7 @@ export default class MysqlTable {
    * @returns
    */
   public async selectById(id: any, selectFields = []) {
-    return this.selectByField(this.getPrimaryKey(), id, selectFields);
+    return this.selectByField(this.getPrimaryKey(), id, selectFields, true);
   }
 
   /**
@@ -381,8 +433,15 @@ export default class MysqlTable {
     };
   }
 
-  public async updateById() {
-    
+  /**
+   * update single entry by id
+   *
+   * @param id
+   * @param updateParameters
+   * @returns
+   */
+  public async updateById(id: string | number, updateParameters = {}) {
+    return this.updateWhere({ [this.getPrimaryKey()]: id }, updateParameters);
   }
 
   /**
@@ -429,7 +488,7 @@ export default class MysqlTable {
    * @returns
    */
   public async deleteById(id: string | number, forceDelete = false) {
-    return this.deleteWhere({ id }, forceDelete);
+    return this.deleteWhere({ [this.getPrimaryKey()]: id }, forceDelete);
   }
 
   /**
@@ -495,6 +554,26 @@ export default class MysqlTable {
       hasPrevPage,
       hasNextPage,
     };
+  }
+
+  /**
+   * convert uuid to binary stream
+   * 
+   * @param uuid 
+   * @returns 
+   */
+  public uuidToBin(uuid: string): Buffer {
+    return uuidToBin(uuid);
+  }
+
+  /**
+   * convert binary to uuid
+   * 
+   * @param bin 
+   * @returns 
+   */
+  public binToUuid(bin: Buffer): string {
+    return binToUuid(bin);
   }
 
   /////////////////////////////////////////////////////////////////

@@ -1,13 +1,15 @@
 import { getEnvVariable } from '@server/env';
 import { Kysely, MysqlDialect, sql } from 'kysely';
 
+
+
 export const isMysqlEnabled = true;
 export const isListenerEnabled = true;
 export const defineRelativePath = '../../../src/models/mysql.defines.ts';
 export const MAX_SERVER_ID = 4294967295;
 export const ConnectTimeout = 30000;
 export const AcquireTimeout = 30000;
-export const DEFAULT_SELECT_LIMIT = 100; 
+
 
 /**
  * This is the configuration for the actual mysql server.

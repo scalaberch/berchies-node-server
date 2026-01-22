@@ -1,77 +1,170 @@
-import path from "path";
-import Files, { currentDir } from "@server/lib/files";
-import { Module } from "./defines";
-import { Server } from "../index";
-import { inArray } from "@server/helpers";
-
-const ModulesFolder = `${currentDir}/server/modules`;
+import path from 'path';
+import Files, { currentDir } from '@server/lib/files';
+import { Module, ServerModule } from './defines';
+import AppServer, { Server } from '../index';
+import { inArray } from '@server/helpers';
+import { ServerConfig } from '@server/defines';
+import Log from '@server/logs';
 
 /**
- * load all modules.
- * 
- * @deprecated
- * @param server 
- * @param loadedModules 
- * @returns 
+ * module folder location
+ *
  */
-export const loadAllModules = async (server: Server, loadedModules: Array<Module>) => {
-  const modules = {};
-  const folders = Files.getFolders(ModulesFolder);
+export const ModulesFolder = `${currentDir}/server/modules`;
 
-  // If no folders exists, then there are no modules in your server so you can't select them.
-  if (folders.length === 0) {
-    return modules;
+/**
+ * application module handler
+ *
+ */
+export class ServerModules {
+  private server: Server;
+  public modules: Record<string, ServerModule>;
+  private loadedModules: Module[];
+
+  public constructor(server: Server = null) {
+    this.modules = {};
+    this.server = server;
+    this.loadedModules = server === null ? [] : server.config?.modules;
   }
 
-  // Then load the module if it's defined in the configuration.
-  for (const selectedModule of loadedModules) {
-    if (!inArray(selectedModule, folders)) {
-      continue;
-    }
+  public getLoadedModules() {
+    return this.loadedModules;
+  }
 
-    const entry = path.join(ModulesFolder, selectedModule, "index");
+  /**
+   * initialize all the modules
+   *
+   * @param server
+   */
+  public async initialize(server: Server = null) {
+    this.server = server;
+
     try {
-      const mod = (await import(entry)).default;
-      // console.log(mod);
-
-
-      modules[selectedModule] = mod;
+      await this.loadAll(server.config);
     } catch (error) {
-      console.error(`Module import error: `, error);
+      Log.error('Module Load Error: ', error, true);
+    }
+
+    // then run start all modules
+    await this.startAll();
+  }
+
+  /**
+   * load all modules.
+   *
+   * @param config
+   * @returns
+   */
+  public async loadAll(config: ServerConfig): Promise<void> {
+    const folders = Files.getFolders(ModulesFolder);
+    if (!folders.length) return;
+
+    const selectedModules = config?.modules;
+    if (!selectedModules) return;
+
+    for (const moduleName of selectedModules) {
+      if (!folders.includes(moduleName)) {
+        Log.warn(`Module '${moduleName}' not found in /modules`);
+        continue;
+      }
+
+      try {
+        const entry = path.join(ModulesFolder, moduleName, 'index');
+        const imported = await import(entry);
+        await this.addModule(imported, moduleName);
+      } catch (error) {
+        Log.error(`Failed to load module '${moduleName}':`, error, true);
+      }
     }
   }
 
-  return modules;
-};
+  /**
+   * add module to the list.
+   *
+   * @param imported
+   * @param moduleName
+   */
+  public async addModule(imported: any, moduleName: string): Promise<void> {
+    const module = imported?.default as ServerModule;
+    await module.init(this.server, moduleName);
 
-/**
- * 
- * @deprecated
- * @param name 
- * @param setup 
- * @returns 
- */
-export default function Module(
-  name: string,
-  setup: (hooks: {
-    // onInit(cb: ModuleLifecycle["onInit"]): void;
-    // onStart(cb: ModuleLifecycle["onStart"]): void;
-    // onShutdown(cb: ModuleLifecycle["onShutdown"]): void;
-  }) => void
-) {
-  // const lifecycle: ModuleLifecycle = {};
+    // Add to registry and run initializer
+    this.modules[moduleName] = module;
+  }
 
-  const module: any = setup({
-    // onInit(cb) {
-    //   lifecycle.onInit = cb;
-    // },
-    // onStart(cb) {
-    //   lifecycle.onStart = cb;
-    // },
-    // onShutdown(cb) {
-    //   lifecycle.onShutdown = cb;
-    // },
-  });
+  /**
+   * check if module is already enabled
+   *
+   * @param moduleName
+   * @returns
+   */
+  public isModuleEnabled(moduleName: Module): boolean {
+    return this.modules.hasOwnProperty(moduleName);
+  }
 
-  return { name, ...module };
+  /**
+   * check if module is loaded in the configuration
+   *  
+   * @param moduleName 
+   * @returns 
+   */
+  public isModuleLoaded(moduleName: Module): boolean {
+    return this.loadedModules.includes(moduleName)
+  }
+
+  /**
+   * get the module if it exists or null if not
+   *
+   * @param moduleName
+   * @returns
+   */
+  public getModule(moduleName: Module): ServerModule | null {
+    const module = this.modules[moduleName];
+    if (typeof module === 'undefined') {
+      return null;
+    }
+    return module;
+  }
+
+  /**
+   * start all modules
+   *
+   * @returns {void}
+   */
+  public async startAll() {
+    let count = 1;
+    const moduleCount = Object.keys(this.modules).length;
+    if (moduleCount > 0) {
+      Log.system('⏳ Starting modules:');
+    }
+
+    for (const name in this.modules) {
+      const mod = this.modules[name];
+      if (typeof mod.start === 'function') {
+        Log.system(`(${count++}/${moduleCount}) Starting ${mod.name}...`);
+        await mod.start();
+      }
+    }
+  }
+
+  /**
+   * stop all modules
+   *
+   * @returns {void}
+   */
+  public async stopAll() {
+    // reverse the order of the modules.
+    const reversed = Object.fromEntries(Object.entries(this.modules).reverse());
+
+    for (const name in reversed) {
+      const mod = this.modules[name];
+      if (typeof mod.start === 'function') {
+        Log.system(`🛑 Stopping ${mod.name}...`);
+        await mod.stop();
+      }
+    }
+  }
 }
+
+// output the module
+export default new ServerModules();

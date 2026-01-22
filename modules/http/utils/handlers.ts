@@ -1,17 +1,19 @@
-import { ErrorRequestHandler, NextFunction, Request, Response } from "express";
+import { CookieOptions, ErrorRequestHandler, NextFunction, Request, Response } from 'express';
 // import Log from "../logs";
-import { getRequestIPAddress } from ".";
-import { camelCaseToSentence } from "@server/lib/strings";
-import { getCurrentTimestamp } from "@server/lib/datetime";
-import { createObjectCsvStringifier as createCsv } from "csv-writer";
+import { getRequestIPAddress } from '.';
+import { camelCaseToSentence } from '@server/lib/strings';
+import { getCurrentTimestamp } from '@server/lib/datetime';
+import { createObjectCsvStringifier as createCsv } from 'csv-writer';
 import {
   HttpRedirectCode,
   HttpError,
   HttpRequest,
   HttpResponse,
   HttpNext,
-  DEFAULT_REDIRECT_URL
-} from "../defines";
+  DEFAULT_REDIRECT_URL,
+  DefaultCookieLife,
+  HttpCookieSameSite,
+} from '../defines';
 
 /**
  * output a generic json response
@@ -24,8 +26,7 @@ import {
 export const output = (res: HttpResponse, payload: any, code: number = 200) => {
   res.jsonOutput = payload;
   res.status(code).json(payload);
-}
-  
+};
 
 /**
  * output a generic sucess json response
@@ -39,7 +40,7 @@ export const outputSuccess = (
   res: HttpResponse,
   message: string,
   payload?: any,
-  access?: Array<any>
+  access?: Array<any>,
 ) =>
   output(res, {
     success: true,
@@ -60,7 +61,7 @@ export const outputCreated = (
   res: HttpResponse,
   message: string,
   payload?: any,
-  access?: Array<any>
+  access?: Array<any>,
 ) =>
   output(
     res,
@@ -70,7 +71,7 @@ export const outputCreated = (
       data: payload,
       access: access,
     },
-    201
+    201,
   );
 
 /**
@@ -81,12 +82,7 @@ export const outputCreated = (
  * @param code
  * @returns
  */
-export const outputError = (
-  res: HttpResponse,
-  message: string,
-  payload?: any,
-  code = 200
-) => {
+export const outputError = (res: HttpResponse, message: string, payload?: any, code = 200) => {
   return output(
     res,
     {
@@ -94,7 +90,7 @@ export const outputError = (
       message,
       error: payload,
     },
-    code
+    code,
   );
 };
 
@@ -108,7 +104,7 @@ export const outputError = (
 export const redirectToUrl = (
   res: HttpResponse,
   url: string,
-  code: HttpRedirectCode = HttpRedirectCode.temporary
+  code: HttpRedirectCode = HttpRedirectCode.temporary,
 ) => res.status(code).redirect(url);
 
 /**
@@ -135,13 +131,11 @@ export const errorHandler = (
   err: HttpError,
   req: HttpRequest,
   res: HttpResponse,
-  next: HttpNext
+  next: HttpNext,
 ): void => {
   const status = err.statusCode || 500; // Set default status code to 500 (Internal Server Error)
-  const message = err.message || "Something went wrong."; // Set default message
+  const message = err.message || 'Something went wrong.'; // Set default message
   const errors: Array<{ field: string; message: string }> = []; // Empty array for collecting errors
-
-  console.log('hahahah')
 
   // Send error response
   res.status(status).json({
@@ -176,7 +170,7 @@ export const tooManyRequestsHandler = (
   req: HttpRequest,
   res: HttpResponse,
   next: HttpNext,
-  options: any
+  options: any,
 ) => {
   res.status(options.statusCode).json({
     message: `Too many requests! Please try again in a few moments.`,
@@ -190,19 +184,14 @@ export const tooManyRequestsHandler = (
  * @param req
  * @param res
  */
-export const notAuthHandler = (
-  req: HttpRequest,
-  res: HttpResponse,
-  customMsg: string = ""
-) =>
+export const notAuthHandler = (req: HttpRequest, res: HttpResponse, customMsg: string = '') =>
   output(
     res,
     {
-      message:
-        customMsg === "" ? `Access to '${req.path}' requires authorization.` : customMsg,
-      error: "unauthorized",
+      message: customMsg === '' ? `Access to '${req.path}' requires authorization.` : customMsg,
+      error: 'unauthorized',
     },
-    401
+    401,
   );
 
 /**
@@ -213,18 +202,14 @@ export const notAuthHandler = (
  * @param req
  * @param res
  */
-export const notAllowedHandler = (
-  req: HttpRequest,
-  res: HttpResponse,
-  customMsg: string = ""
-) =>
+export const notAllowedHandler = (req: HttpRequest, res: HttpResponse, customMsg: string = '') =>
   output(
     res,
     {
-      message: customMsg === "" ? `Access to '${req.path}' is not allowed.` : customMsg,
-      error: "forbidden",
+      message: customMsg === '' ? `Access to '${req.path}' is not allowed.` : customMsg,
+      error: 'forbidden',
     },
-    403
+    403,
   );
 
 /**
@@ -234,21 +219,16 @@ export const notAllowedHandler = (
  * @param res
  * @param next
  */
-export const httpRequestLog = async (
-  req: HttpRequest,
-  res: HttpResponse,
-  next: HttpNext
-) => {
+export const httpRequestLog = async (req: HttpRequest, res: HttpResponse, next: HttpNext) => {
   const { originalUrl, method, headers } = req;
   const ipAddress = getRequestIPAddress(req);
-  const userAgent: string = headers["user-agent"];
+  const userAgent: string = headers['user-agent'];
 
-  if (userAgent === "ELB-HealthChecker/2.0") {
+  if (userAgent === 'ELB-HealthChecker/2.0') {
     return next();
   }
 
-  // console.log("requesting...")
-  const body = method === "POST" || method === "PUT" ? req.body : {};
+  const body = method === 'POST' || method === 'PUT' ? req.body : {};
 
   // Log.http(`${method} ${originalUrl}`, {
   //   ipAddress,
@@ -267,11 +247,7 @@ export const httpRequestLog = async (
  * @param dataset
  * @param outputName
  */
-export const outputAsCsv = async (
-  res: HttpResponse,
-  dataset: Array<any>,
-  outputName = ""
-) => {
+export const outputAsCsv = async (res: HttpResponse, dataset: Array<any>, outputName = '') => {
   // Auto generate the header
   const firstItem = dataset.length > 0 ? dataset[0] : {};
   const header = Object.keys(firstItem).map((key) => ({
@@ -287,9 +263,44 @@ export const outputAsCsv = async (
 
   // Output the csv file.
   const fileName = outputName.length > 0 ? outputName : getCurrentTimestamp();
-  res.header("Content-Type", "text/csv");
-  res.header("Content-Disposition", `attachment; filename=${fileName}.csv`);
+  res.header('Content-Type', 'text/csv');
+  res.header('Content-Disposition', `attachment; filename=${fileName}.csv`);
   return res.send(csvContent);
+};
+
+/**
+ * 
+ * @param res 
+ * @param name 
+ * @param value 
+ * @param path 
+ * @param maxAge 
+ * @param sameSite 
+ * @param secure 
+ * @param httpOnly 
+ * @param options 
+ */
+export const setCookie = (
+  res: HttpResponse,
+  name: string,
+  value: any,
+  path = '/',
+  maxAge = DefaultCookieLife,
+  sameSite: HttpCookieSameSite,
+  secure = true,
+  httpOnly = true,
+  options: CookieOptions = {},
+) => {
+  // console.log('posting cookie!')
+
+  res.cookie(name, value, {
+    maxAge,
+    path,
+    sameSite,
+    secure,
+    httpOnly,
+    ...options,
+  });
 };
 
 export default {};

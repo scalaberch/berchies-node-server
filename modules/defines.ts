@@ -1,132 +1,110 @@
 import path from 'path';
 import Files, { currentDir } from '@server/lib/files';
 import { ServerConfig } from '@server/defines';
-import { Server } from '..';
-import { Log } from '@server/logs';
+import { Server } from '@server/.';
+import Log from '@server/logs';
 
 export const ModulesFolder = `${currentDir}/server/modules`;
-export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe';
+export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe' | 'cron';
 export type EnabledModules = Module[];
 
-export interface ServerModuleInterface {
-  server: Server;
-  name: string;
-  config: any;
-
-  // Called immediately after loading the module class
-  init(): Promise<any | void>;
-
-  // Called after all modules are fully loaded
-  start(): Promise<any | void>;
-
-  // Called after all modules are fully loaded
-  stop(): Promise<any | void>;
+export interface ServerModuleSettings {
+  requires?: Module[],
+  name?: string
 }
 
-/// move stuff below to index.ts
-
-export class ServerModule implements ServerModuleInterface {
+export abstract class ServerModule {
   public server: Server;
   public name: string;
   public config: any;
+  public ready: boolean;
+  protected requires: Module[];
 
-  public constructor(server: Server, name = '') {
-    this.server = server;
+  constructor(settings: ServerModuleSettings = {}) {
+    this.ready = false;
+    this.config = {};
+    this.name = settings?.name || '';
+    this.requires = settings.requires;
+  }
+
+  /**
+   * Called immediately after loading the module class
+   * 
+   * @param server 
+   * @param name 
+   * @returns
+   */
+  async init(server: Server, name: string): Promise<any | void> {
     this.name = name;
+    this.server = server;
 
-    // find the configuration based on the server config values
+    // set the configuration
     const baseConfig = this.server.config;
     this.config = baseConfig[this.name] ?? {};
+
+    // run on execute first
+    await this.onInit(this.config);
   }
 
-  public async init() {}
+  /**
+   * Child module implements the method.
+   * 
+   */
+  protected abstract onInit(config: any): Promise<void>;
 
-  public async start(): Promise<any> {}
+  /**
+   * Called after all modules are fully loaded
+   * 
+   * @returns
+   */
+  async start(): Promise<any | void> {
 
-  public async stop() {}
-}
+    // run on start method.
+    await this.onStart();
 
-export class ServerModules {
-  private server: Server;
-  public modules: Record<string, ServerModule>;
+    // set as ready
+    this.ready = true;
+  }
 
-  public constructor(server: Server) {
-    this.modules = {};
+  /**
+   * Child module implements the method.
+   * 
+   */
+  protected abstract onStart(): Promise<any>;
+
+  /**
+   * Called when server shuts down.
+   * 
+   * @returns
+   */
+  async stop(): Promise<any | void> {
+    await this.onStop();
+    this.ready = false;
+  }
+
+  /**
+   * Child module implements the method.
+   * 
+   */
+  protected abstract onStop(): Promise<any>;
+
+  /**
+   * set the module name
+   *
+   * @param name
+   */
+  public async setName(name: string) {
+    this.name = name;
+  }
+
+  /**
+   * set the server
+   *
+   * @param server
+   */
+  public async setServer(server: Server) {
     this.server = server;
   }
-
-  public async addModule(imported: any, moduleName: string): Promise<void> {
-    const moduleClass = imported?.default;
-    const module: ServerModule = new moduleClass(this.server, moduleName);
-
-    // Add to registry and run initializer
-    this.modules[moduleName] = module;
-    await this.modules[moduleName].init();
-  }
-
-  public isModuleEnabled(moduleName: Module): boolean {
-    return this.modules.hasOwnProperty(moduleName);
-  }
-
-  public getModule(moduleName: Module): ServerModule | null {
-    const module = this.modules[moduleName];
-    if (typeof module === 'undefined') {
-      return null;
-    }
-    return module;
-  }
-
-  public async loadAll(config: ServerConfig): Promise<void> {
-    const folders = Files.getFolders(ModulesFolder);
-    if (!folders.length) return;
-
-    const selectedModules = config?.modules;
-    if (!selectedModules) return;
-
-    for (const moduleName of selectedModules) {
-      if (!folders.includes(moduleName)) {
-        console.warn(`Module '${moduleName}' not found in /modules`);
-        continue;
-      }
-
-      try {
-        const entry = path.join(ModulesFolder, moduleName, 'index');
-        const imported = await import(entry);
-        await this.addModule(imported, moduleName);
-      } catch (error) {
-        console.error(`Failed to load module '${moduleName}':`, error);
-        throw error; // stop server start
-      }
-    }
-  }
-
-  public async startAll() {
-    let count = 1;
-    const moduleCount = Object.keys(this.modules).length;
-    if (moduleCount > 0) {
-      Log.system('⏳ Starting modules:');
-    }
-
-    for (const name in this.modules) {
-      const mod = this.modules[name];
-      if (typeof mod.start === 'function') {
-        Log.system(`(${count++}/${moduleCount}) Starting ${mod.name}...`);
-        await mod.start();
-      }
-    }
-
-    // console.log("\n");
-  }
-
-  public async stopAll() {
-    // reverse the order of the modules.
-    const reversed = Object.fromEntries(Object.entries(this.modules).reverse());
-    for (const name in reversed) {
-      const mod = this.modules[name];
-      if (typeof mod.start === 'function') {
-        Log.system(`🛑 Stopping ${mod.name}...`);
-        await mod.stop();
-      }
-    }
-  }
 }
+
+export default {};

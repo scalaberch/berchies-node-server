@@ -1,25 +1,16 @@
 import { ServerModule } from '@server/modules/defines';
-import server from '@server/index';
 import { Kysely, MysqlDialect, PoolConfig, sql } from './defines';
-import { Log } from '@server/logs';
+import Log from '@server/logs';
 import { createPool, Pool } from 'mysql2';
 import { executeRawQuery } from './methods';
 
-export const mysql = (): Mysql | null => {
-  const mysqlObject = server.modules.getModule('mysql');
-  if (mysqlObject === null) {
-    return null;
-  }
-  return mysqlObject as Mysql;
-};
-
-export default class Mysql extends ServerModule {
+export class Mysql extends ServerModule {
   private Pool: Pool | null = null;
   private Dialect: MysqlDialect;
   private Db: Kysely<any> | null = null;
   private serverConfig = {};
 
-  override async init() {
+  override async onInit() {
     // set the configuration
     this.serverConfig = PoolConfig;
 
@@ -31,19 +22,19 @@ export default class Mysql extends ServerModule {
     this.Db = new Kysely<any>({ dialect: this.Dialect });
   }
 
-  override async start() {
+  override async onStart() {
     // actually attempt connect to database
     try {
       await this.execute(`SELECT 1`, []);
-      Log.info(`Connection success.`);
+      Log.info(`[mysql] Connection success.`);
       return true;
     } catch (error) {
-      Log.error(`Database failed to connect: `, error);
+      Log.error(`[mysql] Database failed to connect on initialization: `, error);
       return false;
     }
   }
 
-  override async stop(): Promise<void> {
+  override async onStop(): Promise<void> {
     // actually stop the database connection
     if (this.Db === null) {
       return Promise.resolve();
@@ -55,8 +46,8 @@ export default class Mysql extends ServerModule {
 
   /**
    * get the database instance (the kysely one)
-   * 
-   * @returns 
+   *
+   * @returns
    */
   getDb(): Kysely<any> | null {
     return this.Db;
@@ -64,8 +55,8 @@ export default class Mysql extends ServerModule {
 
   /**
    * gets the database configuration
-   * 
-   * @returns 
+   *
+   * @returns
    */
   getConfig() {
     return this.serverConfig;
@@ -103,9 +94,9 @@ export default class Mysql extends ServerModule {
 
   /**
    * executes a sql query and returns the results
-   * 
-   * @param sql 
-   * @param repl 
+   *
+   * @param sql
+   * @param repl
    */
   async query(sql: string, repl?: any[] | Record<string, any>) {
     const queryResults = await this.execute(sql, repl);
@@ -148,4 +139,10 @@ export default class Mysql extends ServerModule {
 
     return tables;
   }
+
+  setSettings(settings = {}) {
+    this.serverConfig = settings;
+  }
 }
+
+export default new Mysql();

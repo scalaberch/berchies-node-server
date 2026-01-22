@@ -1,5 +1,5 @@
 import moment from "moment-timezone";
-import { serverTimezone } from "../index";
+import { serverTimezone } from "../defines";
 
 export enum DateTimeFormats {
   standard = "YYYY-MM-DD HH:mm:ss",

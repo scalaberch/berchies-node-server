@@ -1,3 +1,4 @@
+import _ from 'lodash'
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
@@ -130,6 +131,28 @@ const isFileExtension = (
   return filtered.length > 0;
 };
 
+/**
+ * check if running executable is running on typescript or on plain javascript
+ * @todo: move this to some helper library?
+ *
+ * @returns
+ */
+export const isRunningInTypeScript = () => {
+  const args = process.argv;
+  const files = args
+    .filter((arg) => arg.includes('index'))
+    .map((arg) => {
+      const split = arg.split('/');
+      return split[split.length - 1];
+    });
+
+  const indexFiles = _.uniq(files);
+  const indexFile = indexFiles.length > 0 ? indexFiles[0] : '';
+  const indexFileSplit = indexFile.split('.');
+  const ext = indexFileSplit[indexFileSplit.length - 1];
+  return ext.toLowerCase() === 'ts';
+};
+
 export default {
   currentDir,
   isFileExtension,
@@ -138,4 +161,5 @@ export default {
   createFolder,
   getFolders,
   getFiles,
+  isRunningInTypeScript
 };

@@ -1,5 +1,7 @@
-import { ServerConfig } from "@server/defines";
-import { EnabledModules } from "@server/modules/defines"
+import { ServerConfig } from '@server/defines';
+import { EnabledModules } from '@server/modules/defines';
+import { HttpConfig } from '@server/modules/http/defines';
+import { WSConfig } from '@server/modules/websockets/defines';
 
 /**
  * Enabled modules
@@ -7,6 +9,11 @@ import { EnabledModules } from "@server/modules/defines"
  * You can specify what module/s to start
  */
 const modules: EnabledModules = [
+  'cache',
+  'mysql',
+  'http',
+  'websockets',
+  // 'stripe'
 ];
 
 /**
@@ -17,8 +24,17 @@ const modules: EnabledModules = [
  * domains that would connect to the api must be registered here.
  *
  */
-const corsDomainList = [
-];
+const corsDomainList = [];
+
+/**
+ * HTTP config
+ * 
+ * Here we define configuration for http module.
+ */
+const httpConfig: HttpConfig = {
+  corsDomainList,
+  enableCookies: false,
+}
 
 /**
  * WebSockets Configuration
@@ -27,16 +43,18 @@ const corsDomainList = [
  *
  */
 const websocketConfig: WSConfig = {
-  authMethod: 'none',
+  authMethod: 'jwt',
+  encryptedMessages: true
 };
 
 /**
  * main server config
  * 
  */
-const AppConfig: Partial<ServerConfig> = {
+const AppConfig: ServerConfig = {
   modules,
   websockets: websocketConfig,
-}
+  http: httpConfig
+};
 
-export default AppConfig
+export default AppConfig;

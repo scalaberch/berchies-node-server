@@ -21,16 +21,16 @@ export const isCacheActive = () => {
   return _cache.isConnected();
 }
 
-export default class Cache extends ServerModule {
+export class Cache extends ServerModule {
   public endpoint: string;
   public redis: RedisClientType = null;
 
-  override async init() {
+  override async onInit() {
     this.endpoint = generateUrl();
     this.redis = createClient({ url: this.endpoint });
   }
 
-  override async start() {
+  override async onStart() {
     try {
       await this.redis.connect();
     } catch (err) {
@@ -38,7 +38,7 @@ export default class Cache extends ServerModule {
     }
   }
 
-  override async stop(): Promise<void> {
+  override async onStop(): Promise<void> {
     // const _cache = getCache();
     // if (isCacheActive()) {
     //   _cache.shutdown();
@@ -176,3 +176,5 @@ export default class Cache extends ServerModule {
     return await this.redis.del(key);
   }
 }
+
+export default new Cache();

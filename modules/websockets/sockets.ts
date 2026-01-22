@@ -1,10 +1,11 @@
 import { WebSocket } from 'ws';
-import WebSocketClient, { IncomingMessage, WSMessageIn, handleOnMessageClient } from './client';
-import { Log } from '@server/logs';
+import WebSocketClient, { IncomingMessage, WSMessageIn } from './client';
+import Log from '@server/logs';
 import { Server } from '@server/index';
-import Http from '../http';
+import { Http } from '../http';
 import { WebSocketServer } from 'ws';
-import Websockets from './index';
+import { Websockets } from './index';
+import { HttpRequest } from '../http/defines';
 
 export const handleOnServerClose = () => {
   // put something here if you want to handle on socker server close
@@ -31,11 +32,11 @@ export const startSocketServer = (server: Server, port: number, wsConfig = {}) =
 export const handleOnConnection = async (
   socketModule: Websockets,
   socket: WebSocket,
-  req: IncomingMessage,
+  req: HttpRequest,
 ) => {
   // create socket client
   const ipAddress = req.socket.remoteAddress;
-  const client = new WebSocketClient(socket, ipAddress);
+  const client = new WebSocketClient(socketModule, socket, ipAddress);
 
   // authenticate
   const isAuthenticated = await client.authenticate(socketModule.authMethod, req);
@@ -44,7 +45,7 @@ export const handleOnConnection = async (
   }
 
   // setup initial socket event handlers
-  client.init(socketModule, );
+  client.init(socketModule);
 
   // add custom message handling
   socket.on('message', (data: string) => {
@@ -55,9 +56,33 @@ export const handleOnConnection = async (
   socket.isAlive = true;
   socketModule.clients[client.id] = client;
 
-  // ping if connected.
+  // execute callback if on connected.
   if (socketModule.handler?.onConnect) {
     await socketModule.handler.onConnect(client, req);
+  }
+};
+
+export const handleOnMessageClient = async (
+  client: WebSocketClient,
+  data: string,
+  socketModule: Websockets,
+) => {
+  const message = data.toString();
+
+  try {
+    const data: WSMessageIn = JSON.parse(message);
+    const type = data?.type || '';
+
+    if (type === 'ping') {
+      client.send({ response: 'pong' });
+      return;
+    }
+
+    if (socketModule.handler?.onMessage) {
+      await socketModule.handler.onMessage(client, data);
+    }
+  } catch (error) {
+    Log.error('Invalid parsing websocket message: ', error);
   }
 };
 

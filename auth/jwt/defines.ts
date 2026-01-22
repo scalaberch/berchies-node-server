@@ -9,6 +9,7 @@ export enum JWTKind {
 }
 
 export interface BaseJWTPayload {
+  jti: string; // JWT unique id
   sub: string | number; // Subject (user ID)
   iat: number; // Issued At (timestamp)
   exp: number; // Expiration time

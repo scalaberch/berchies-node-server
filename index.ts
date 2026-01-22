@@ -1,59 +1,77 @@
-import _ from 'lodash';
 import { memoryUsage } from 'node:process';
-import Modules, { loadAllModules } from './modules/index';
-import { Module, ServerModules } from './modules/defines';
-import { ServerConfig, SHUTDOWN_FORCE_TIMEOUT } from './defines';
+import Modules, { ServerModules } from './modules/index';
+import { ServerConfig, serverTimezone, SHUTDOWN_FORCE_TIMEOUT } from './defines';
+import { isRunningInTypeScript } from './lib/files';
+import { currentDir } from './lib/files';
+import ServerEnv, { ServerEnvironment } from './env';
 
 import Main from '@src/main';
 import Config from '@src/config';
-import { initializeLogger, Log } from './logs';
+import Log from './logs';
+import { Http } from './modules/http';
 
 /**
  * main server application definition
  *
  */
 export class Server {
+  public environment: ServerEnvironment;
   public config: ServerConfig;
   public modules: ServerModules;
   public timezone: string;
   public isRunningTs: boolean;
   public ready: boolean;
+  public cwd: string;
 
   constructor() {
     this.config = Config;
-    this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    this.timezone = serverTimezone;
     this.isRunningTs = isRunningInTypeScript();
-    this.modules = new ServerModules(this);
+    this.modules = Modules; //new ServerModules(this);
     this.ready = false;
+    this.cwd = currentDir;
+
+    // load environment variables
+    this.environment = ServerEnv;
   }
 
+  /**
+   * start application
+   *
+   * @returns {void}
+   */
   public async start() {
     // initialize logging system
-    initializeLogger(this.config);
-    Log.system(`\n\n\nInitializing server...`);
+    Log.initialize(this.config);
+    Log.system(`\n\Starting server...`);
+    Log.info(`ENV: ${this.environment.getVariable('ENV')}`);
+    Log.info(`NODE_ENV: ${this.environment.getVariable('NODE_ENV')}`);
+    Log.system('\n');
+
+    if (this.ready) {
+      const errorMessage = '[server] Server already running!';
+      throw Error(errorMessage);
+    }
 
     // attach process handlers
     this.attachProcessHandlers();
 
     // load all modules
-    try {
-      await this.modules.loadAll(this.config);
-    } catch (error) {
-      Log.error('Module Load Error: ', error);
-      return; // we stop if there are any error/s when loading all modules
-    }
-
-    // then run start all modules
-    await this.modules.startAll();
+    await this.modules.initialize(this);
 
     // then find the src/main file and if it exists, run the main function
-    Log.info(`\n🟢 Server is ready.\n\n`);
     this.ready = true;
+    Log.info(`\n🟢 Server is ready.\n\n`);
     if (typeof Main === 'function') {
       Main(this);
     }
   }
 
+  /**
+   * stop application
+   *
+   * @returns {void}
+   */
   public async shutdown() {
     if (!this.ready) {
       return Promise.resolve();
@@ -67,15 +85,30 @@ export class Server {
     return Promise.resolve();
   }
 
+  /**
+   * get server timezone
+   *
+   * @returns
+   */
   public getTimezone() {
     return this.timezone;
   }
 
+  /**
+   * get RAM usage
+   *
+   * @returns
+   */
   public getMemoryUsage() {
     const currentMemoryUsage = memoryUsage();
     return currentMemoryUsage;
   }
 
+  /**
+   * attach node.js process handlers
+   *
+   * @returns
+   */
   private attachProcessHandlers() {
     process.on('SIGTERM', () => this.handleShutdown('SIGTERM'));
     process.on('SIGINT', () => this.handleShutdown('SIGINT'));
@@ -87,6 +120,11 @@ export class Server {
     });
   }
 
+  /**
+   * handle shutdown
+   *
+   * @param signal
+   */
   private async handleShutdown(signal: string) {
     Log.system(`⚠️ Received ${signal}. Starting shutdown sequence...`);
 
@@ -105,35 +143,8 @@ export class Server {
       process.exit(1); // Exit with error
     }
   }
+  
 }
 
-/**
- * server timezone
- *
- */
-export const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-/**
- * check if running executable is running on typescript or on plain javascript
- *
- * @returns
- */
-export const isRunningInTypeScript = () => {
-  const args = process.argv;
-  const files = args
-    .filter((arg) => arg.includes('index'))
-    .map((arg) => {
-      const split = arg.split('/');
-      return split[split.length - 1];
-    });
-
-  const indexFiles = _.uniq(files);
-  const indexFile = indexFiles.length > 0 ? indexFiles[0] : '';
-  const indexFileSplit = indexFile.split('.');
-  const ext = indexFileSplit[indexFileSplit.length - 1];
-  return ext.toLowerCase() === 'ts';
-};
-
-// pack up server and export
-const server = new Server();
-export default server;
+// pack up server and export as a singleton
+export default new Server();

@@ -264,3 +264,23 @@ export const capitalizeString = (str: string) => {
 
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
+
+/**
+ * converts a UUID string to binary
+ *
+ * @param uuid
+ * @returns
+ */
+export const uuidToBin = (uuid: string): Buffer => {
+  return Buffer.from(uuid.replace(/-/g, ''), 'hex');
+};
+
+/**
+ * convert a binary stream to UUID
+ * 
+ * @param bin 
+ * @returns 
+ */
+export const binToUuid = (bin: Buffer): string => {
+  return bin.toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+};

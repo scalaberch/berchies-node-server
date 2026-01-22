@@ -1,19 +1,18 @@
 const fs = require("fs");
-const path = require("path");
-
-// Adjust path to wherever your Kysely-generated file lives:
-const definesFilePath = "./src/models/mysql.defines.ts";
+const definesFilePath = "./src/database/mysql.defines.ts";
 
 let content = fs.readFileSync(definesFilePath, "utf8");
 
-// replace the base Generated<T>
+// clean up the 'Generated'
 content = content.replace(/Generated<T>/g, "GeneratedColumn<T>");
-
-// Replace Generated<T> with just T
 content = content.replace(/Generated<([^>]+)>/g, "$1");
 
-fs.writeFileSync(definesFilePath, content, "utf8");
+// // append Buffer object with string for "safety"
+// content = content.replace(/Buffer\;/g, "Uuid;");
 
-console.log("✅ Removed Generated<> wrappers from db types");
+// // add a new "type"
+// content = content.replace(/"kysely";/g, `"kysely";\n\nexport type Uuid = Buffer | string;`);
+
+fs.writeFileSync(definesFilePath, content, "utf8");
 
 

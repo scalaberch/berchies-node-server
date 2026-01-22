@@ -1,21 +1,26 @@
-import cors from "cors";
-import { Express } from "express";
-import { isDevEnv } from "../../env";
-import { HttpConfig } from "./defines";
+import cors from 'cors';
+import { Express } from 'express';
+import { HttpConfig } from './defines';
 
 const applyCors = (server: Express, config: HttpConfig) => {
-  if (isDevEnv()) {
-    return server.use(cors());
-  }
-
   const corsDomainList = config?.corsDomainList ?? [];
 
   server.use(
     cors({
+      /**
+       * set to true if to allow browser to send/receive cookies
+       */
       credentials: true,
+
+      /**
+       * definition to define origins
+       *
+       * @param origin
+       * @param callback
+       * @returns
+       */
       origin: function (origin, callback) {
-        // allow requests with no origin
-        // (like mobile apps or curl requests)
+        // allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
         // check on cors domain list
@@ -26,7 +31,7 @@ const applyCors = (server: Express, config: HttpConfig) => {
 
         return callback(null, true);
       },
-    })
+    }),
   );
 };
 

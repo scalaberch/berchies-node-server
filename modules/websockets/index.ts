@@ -2,13 +2,24 @@ import fs from 'fs';
 import path from 'path';
 import { ServerModule } from '@server/modules/defines';
 import { WebSocketServer } from 'ws';
-import { Log } from '@server/logs';
-import { PORT, PING_INTERVAL, MainSocketsSrc, BasePath, WSHandler, WSAuthMethod } from './defines';
+import Log from '@server/logs';
+import {
+  PORT,
+  PING_INTERVAL,
+  MainSocketsSrc,
+  BasePath,
+  WSHandler,
+  WSAuthMethod,
+  WSConfig,
+} from './defines';
 import WebsocketClient, { IncomingMessage } from './client';
-import { isRunningInTypeScript } from '@server/index';
+import { isRunningInTypeScript } from '@server/lib/files';
 import { handleOnConnection, handleOnServerClose, startSocketServer } from './sockets';
+import { parseCookiesAsync } from '../http/cookies';
+import { wrapToHttpRequest } from '../http/utils';
+import { NodeEnvironments } from '@server/env';
 
-export default class Websockets extends ServerModule {
+export class Websockets extends ServerModule {
   public ws: WebSocketServer;
   public wsConfig: any;
   public port: number;
@@ -16,12 +27,18 @@ export default class Websockets extends ServerModule {
   public clients: Record<string, WebsocketClient>;
   public handler: WSHandler;
   public authMethod: WSAuthMethod;
+  public autoRefreshJwt: boolean;
+  public encryptedMessages: boolean;
 
-  override async init() {
+  override async onInit() {
     this.port = PORT;
     this.intervalHandle = null;
     this.clients = {};
+    this.ws = null;
+
     this.authMethod = this.config?.authMethod || 'none';
+    this.autoRefreshJwt = this.config?.autoRefreshJwtOnExpiry || false;
+    this.encryptedMessages = this.config?.encryptedMessages || false;
 
     this.wsConfig = {
       path: BasePath,
@@ -31,8 +48,13 @@ export default class Websockets extends ServerModule {
     this.loadHandler();
   }
 
-  override async start() {
+  override async onStart() {
     const parent = this;
+    const serverEnv = this.server.environment;
+    const nodeEnv = serverEnv.getNodeEnv();
+    if (nodeEnv === NodeEnvironments.test) {
+      return Promise.resolve(null);
+    }
 
     // setup server
     this.ws = startSocketServer(this.server, this.port, this.wsConfig);
@@ -44,7 +66,13 @@ export default class Websockets extends ServerModule {
 
     // setup client connection handler
     this.ws.on('connection', async (socket: WebSocket, req: IncomingMessage) => {
-      return await handleOnConnection(parent, socket, req);
+      const request = await wrapToHttpRequest(req);
+
+      // await parseCookiesAsync(req);
+      // const cookies = request.cookies;
+      // console.log(cookies);
+
+      return await handleOnConnection(parent, socket, request);
     });
 
     // enable interval
@@ -54,7 +82,7 @@ export default class Websockets extends ServerModule {
     return Promise.resolve(this.ws);
   }
 
-  override async stop(): Promise<void> {
+  override async onStop(): Promise<void> {
     if (this.intervalHandle !== null) {
       clearInterval(this.intervalHandle);
     }
@@ -64,7 +92,12 @@ export default class Websockets extends ServerModule {
   }
 
   private enableInterval() {
-    this.intervalHandle = setInterval(() => {}, PING_INTERVAL);
+    const parent = this;
+
+    this.intervalHandle = setInterval(() => {
+      // ping all clients
+      parent.pingHeartbeatToClients();
+    }, PING_INTERVAL);
   }
 
   private async loadHandler() {
@@ -74,7 +107,7 @@ export default class Websockets extends ServerModule {
       const module = await import(path.resolve(srcFile));
       this.handler = module.default ?? module; // support both default and named export
     } else {
-      Log.warn('Module not loaded!');
+      Log.warn('Websocket module not loaded!');
     }
   }
 
@@ -86,6 +119,10 @@ export default class Websockets extends ServerModule {
     return this.getAllClients().length;
   }
 
+  /**
+   *
+   * @returns
+   */
   public pingHeartbeatToClients = () => {
     const clients = this.getAllClients();
     if (clients.length === 0) {
@@ -95,18 +132,27 @@ export default class Websockets extends ServerModule {
     clients.forEach((client: WebsocketClient) => {
       //   //   // if (ws.isAlive === false) return ws.terminate();
       //   //   //   // ws.isAlive = false;
-      //   client.ping();
+
+      client.ping();
     });
   };
 
+  /**
+   * handle shutdown
+   *
+   */
   public shutdown() {
-    this.ws.close(() => {
-      Log.info('WebSocket server closed.');
-    });
+    if (this.ws !== null) {
+      this.ws.close(() => {
+        Log.info('WebSocket server closed.');
+      });
 
-    const clients = this.getAllClients();
-    clients.forEach((client: WebsocketClient) => {
-      client.socket.close(1001, 'Server shutting down.');
-    });
+      const clients = this.getAllClients();
+      clients.forEach((client: WebsocketClient) => {
+        client.socket.close(1001, 'Server shutting down.');
+      });
+    }
   }
 }
+
+export default new Websockets();

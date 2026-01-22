@@ -1,5 +1,5 @@
 import { HttpNext, HttpRequest, HttpResponse } from "../defines";
-import { Log } from "@server/logs"
+import Log from '@server/logs';
 import { getRequestIPAddress } from "../utils";
 
 const healthCheckUserAgents = [

@@ -1,7 +1,7 @@
 import { getEnvVariable, isProductionEnv } from "@server/env";
 import { AWS_ACCESS_KEY_ID, AWS_REGION, AWS_SECRET_ACCESS_KEY } from "@server/lib/aws";
 import { TransformableInfo } from 'logform';
-import winston from "winston";
+
 
 export const ServiceName = getEnvVariable("PROJ_NAME", false, "node-app")
 export const LogStore: string = getEnvVariable("LOG_STORE", false, "file");
@@ -39,13 +39,3 @@ export const DefaultLoggingConfig: LoggingConfig = {
 export interface FormattedPayload extends TransformableInfo {
   meta?: any;
 }
-
-winston.addColors({
-  critical: "red bold",
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  http: "white",
-  debug: "white",
-  ws: "magenta",
-});
