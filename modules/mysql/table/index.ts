@@ -30,7 +30,14 @@ import {
  * proxy exports
  *
  */
-export type { MysqlInsertResult, PrimaryKeyType, TableFieldsArray, TableName };
+export type {
+  MysqlInsertResult,
+  PrimaryKeyType,
+  TableFieldsArray,
+  TableName,
+  WhereCondition,
+  SortCondition,
+};
 
 /**
  * this is the main sql table class wrapper.
@@ -330,35 +337,41 @@ export default class MysqlTable {
     sortCondition: SortCondition = {},
     limit = DEFAULT_SELECT_LIMIT,
   ) {
-    let selectStmt = this.select();
+    const pk = this.getPrimaryKey();
+    let stmt = this.select();
 
     // set the conditions
-    selectStmt = this.applyWhereCondition(selectStmt, condition) as SelectQueryBuilder<
-      any,
-      any,
-      any
-    >;
+    stmt = this.applyWhereCondition(stmt, condition) as SelectQueryBuilder<any, any, any>;
 
     // apply sorting
-    selectStmt = applyDynamicSorts(selectStmt, sortCondition) as SelectQueryBuilder<any, any, any>;
+    stmt = applyDynamicSorts(stmt, sortCondition) as SelectQueryBuilder<any, any, any>;
 
     // set the select fields
-    selectStmt =
-      selectFields.length === 0 ? selectStmt.selectAll() : selectStmt.select(selectFields);
+    stmt = selectFields.length === 0 ? stmt.selectAll() : stmt.select(selectFields);
 
     // override uuid if so
     if (this.isPrimaryKeyUUID()) {
-      const pk = this.getPrimaryKey();
-      const selecter = sql<string>`BIN_TO_UUID(${sql.ref(pk)})`;
-      selectStmt = selectStmt.select([selecter.as(pk)]);
+      if (condition[pk]) {
+        condition[pk] = uuidToBin(condition[pk]);
+      }
+      // const selecter = sql<string>`BIN_TO_UUID(${sql.ref(pk)})`;
+      // selectStmt = selectStmt.select([selecter.as(pk)]);
     }
 
     // append the limit
-    selectStmt = selectStmt.limit(limit);
+    stmt = stmt.limit(limit);
 
     // run said query
-    const results = await selectStmt.execute();
-    return results; // selectStmt.compile().sql;
+    const results = await stmt.execute();
+
+    const cleanedUpResults = results.map((result) => {
+      if (this.isPrimaryKeyUUID()) {
+        result[pk] = binToUuid(result[pk]);
+      }
+      return { ...result };
+    });
+
+    return cleanedUpResults; // selectStmt.compile().sql;
   }
 
   /**
@@ -384,6 +397,28 @@ export default class MysqlTable {
       return queryResults;
     }
 
+    const [firstRecord] = queryResults;
+    return firstRecord ?? null;
+  }
+
+  /**
+   * select by a single field.
+   *
+   * @param fieldName
+   * @param value
+   * @param selectFields
+   * @param pickSingle - true if just to select a single entry, false if to return all entries
+   */
+  public async selectOneByField(
+    fieldName: string,
+    value: any,
+    selectFields = [],
+  ): Promise<any | null> {
+    if (!this.isValidField(fieldName)) {
+      return null;
+    }
+
+    const queryResults = await this.selectWhere({ [fieldName]: value }, selectFields);
     const [firstRecord] = queryResults;
     return firstRecord ?? null;
   }
@@ -558,9 +593,9 @@ export default class MysqlTable {
 
   /**
    * convert uuid to binary stream
-   * 
-   * @param uuid 
-   * @returns 
+   *
+   * @param uuid
+   * @returns
    */
   public uuidToBin(uuid: string): Buffer {
     return uuidToBin(uuid);
@@ -568,9 +603,9 @@ export default class MysqlTable {
 
   /**
    * convert binary to uuid
-   * 
-   * @param bin 
-   * @returns 
+   *
+   * @param bin
+   * @returns
    */
   public binToUuid(bin: Buffer): string {
     return binToUuid(bin);

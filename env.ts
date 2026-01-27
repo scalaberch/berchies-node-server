@@ -207,9 +207,9 @@ export class ServerEnvironment {
 
   /**
    * check if environment variable key exists
-   * 
-   * @param key 
-   * @returns 
+   *
+   * @param key
+   * @returns
    */
   keyExists(key: string) {
     return this.variables.hasOwnProperty(key);
@@ -217,22 +217,29 @@ export class ServerEnvironment {
 
   /**
    * set a environment variable.
-   * 
-   * @param key 
-   * @param value 
+   *
+   * @param key
+   * @param value
    */
   setVariable(key: string, value: string | number) {
     this.variables[key] = value;
   }
 
-  getNodeEnv(){
+  getNodeEnv() {
     return this.nodeEnv;
   }
 
-  getEnv(){
+  getEnv() {
     return this.env;
   }
 
+  isDevEnv() {
+    return this.env === AppEnvironments.local && this.nodeEnv === NodeEnvironments.development;
+  }
+
+  isLocalTestMode() {
+    return this.env === AppEnvironments.local && this.nodeEnv === NodeEnvironments.test;
+  }
 }
 
 /**

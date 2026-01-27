@@ -42,7 +42,7 @@ export class Server {
    */
   public async start() {
     // initialize logging system
-    Log.initialize(this.config);
+    Log.initialize(this.config, this);
     Log.system(`\n\Starting server...`);
     Log.info(`ENV: ${this.environment.getVariable('ENV')}`);
     Log.info(`NODE_ENV: ${this.environment.getVariable('NODE_ENV')}`);
@@ -143,7 +143,7 @@ export class Server {
       process.exit(1); // Exit with error
     }
   }
-  
+
 }
 
 // pack up server and export as a singleton

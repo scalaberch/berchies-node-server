@@ -34,7 +34,7 @@ if [[ -n "$MYSQL_PASS" ]]; then
   credentials="$MYSQL_USER:$MYSQL_PASS"
 fi
 DB_HOST="$MYSQL_HOST"
-if [[ "$ENV" == "dev" ]]; then 
+if [[ "$ENV" == "local" || "$ENV" == "dev" ]]; then 
   if ! grep -qE '/docker/|/kubepods/' /proc/1/cgroup 2>/dev/null; then
     DB_HOST="127.0.0.1"
   fi

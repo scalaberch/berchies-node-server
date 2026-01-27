@@ -6,10 +6,12 @@ export class JWTAuthClass {
   private refreshToken: string;
   private valid: boolean;
 
-  constructor() {
+  constructor(payload = {}, sub = '') {
     this.accessToken = '';
     this.refreshToken = '';
     this.valid = false;
+
+    this.generate(payload);
   }
 
   getAccessToken() {
@@ -26,7 +28,12 @@ export class JWTAuthClass {
 
   isRefreshTokenExpired() {}
 
-  generate(payload = {}) {}
+  generate(payload = {}) {
+
+
+
+    return this;
+  }
 
   refresh(payload = {}) {
     // const { jti, sub, iss, player, aud } = refreshTokenData;

@@ -1,26 +1,32 @@
 import Moralis from "moralis";
 import { getEnvVariable } from "@server/env";
+import Log from "@server/logs";
 
-let _started: boolean = false;
 const MORALIS_API_KEY: string = getEnvVariable("MORALIS_API_KEY");
 const EvmChains = Moralis.EvmUtils.EvmChain;
 const chain = EvmChains.CRONOS;
 
-/**
- * initialize moralis
- * 
- */
-const init = async () => {
-  await Moralis.start({
-    apiKey: MORALIS_API_KEY,
-  });
+let moralisStarted = false;
 
-  _started = true;
-  return Moralis;
+/**
+ * Initializes the Moralis SDK if it hasn't been started yet.
+ * This function ensures Moralis.start is only called once.
+ */
+const startMoralis = async () => {
+  if (!moralisStarted) {
+    if (!MORALIS_API_KEY) {
+      throw new Error("MORALIS_API_KEY environment variable is not set.");
+    }
+    await Moralis.start({
+      apiKey: MORALIS_API_KEY,
+    });
+    moralisStarted = true;
+  }
 };
 
 /**
- * Checks if a transaction hash is successful/confirmed.
+ * Fetches verbose transaction data for a given hash.
+ * This is the base function for other transaction-related checks.
  * Note: on the free plan in Moralis, you have 4000 daily CUs (150 CU/sec)
  *  and this request costs 5 CUs per call.
  *
@@ -28,6 +34,8 @@ const init = async () => {
  * @returns
  */
 const getTransactionData = async (transactionHash: string) => {
+  await startMoralis();
+
   try {
     const response = await Moralis.EvmApi.transaction.getTransactionVerbose({
       chain,
@@ -36,7 +44,7 @@ const getTransactionData = async (transactionHash: string) => {
 
     return response === null ? null : response.result;
   } catch (err) {
-    // console.error(err);
+    Log.error(`Moralis: Failed to get transaction data for hash ${transactionHash}`, err);
     return null;
   }
 };
@@ -48,24 +56,16 @@ const getTransactionData = async (transactionHash: string) => {
  * @returns
  */
 const isTransactionSuccess = async (transactionHash: string) => {
-  try {
-    const response = await Moralis.EvmApi.transaction.getTransactionVerbose({
-      chain,
-      transactionHash,
-    });
+  const transactionData = await getTransactionData(transactionHash);
 
-    if (response === null) {
-      return false;
-    }
-
-    const result = response.result;
-    const isSuccess = result.blockHash && result.receiptStatus === 1;
-
-    return isSuccess;
-  } catch (err) {
-    console.error(err);
+  if (!transactionData) {
     return false;
   }
+
+  // A transaction is successful if it has been included in a block
+  // and its receipt status is 1 (success).
+  const isSuccess = transactionData.blockHash && transactionData.receiptStatus === 1;
+  return isSuccess;
 };
 
 /**
@@ -80,6 +80,8 @@ const isTokenAlreadyInAddress = async (
   tokenAddress: string,
   walletAddress: string
 ) => {
+  await startMoralis();
+
   try {
     const response = await Moralis.EvmApi.nft.getWalletNFTs({
       chain,
@@ -91,7 +93,7 @@ const isTokenAlreadyInAddress = async (
     );
     return filtered.length > 0;
   } catch (err) {
-    console.error(err);
+    Log.error(`Moralis: Failed to check token ownership for wallet ${walletAddress}`, err);
     return false;
   }
 };
@@ -106,27 +108,27 @@ const matchTransactionTokens = async (
   contractAddress: string,
   tokens: string[] | number[]
 ) => {
-  try {
-    const response = await Moralis.EvmApi.transaction.getTransactionVerbose({
-      chain,
-      transactionHash,
-    });
+  const transactionData = await getTransactionData(transactionHash);
 
-    const result = response.result;
-    const isSuccess = result.blockHash && result.receiptStatus === 1;
-
-    const { logs } = result;
-    const tokenIds = findTokenIdsInLogData(logs);
-
-    return isSuccess;
-  } catch (err) {
-    console.error(err);
+  if (!transactionData) {
     return false;
   }
+
+  const isSuccess = transactionData.blockHash && transactionData.receiptStatus === 1;
+  if (!isSuccess) {
+    return false;
+  }
+
+  const { logs } = transactionData;
+  const tokenIdsByContract = findTokenIdsInLogData(logs);
+
+  // Check if the specific contract address has the expected tokens
+  const foundTokens = tokenIdsByContract[contractAddress.toLowerCase()] || [];
+  return tokens.every((token) => foundTokens.includes(Number(token)));
 };
 
 /**
- * 
+ * Parses transaction logs to find 'Transfer' events and extracts the token IDs, grouped by contract address.
  * @param logs 
  * @returns 
  */
@@ -136,41 +138,36 @@ const findTokenIdsInLogData = (logs: any[]) => {
   }
 
   // sift through the dataset
-  const logDataset = logs
-    .map((log) => ({
-      contract: log.address.toJSON(),
-      decodedEvent: log.decodedEvent,
-    }))
-    .filter(
-      (ev) =>
-        ev.decodedEvent &&
-        ev.decodedEvent.label.toLowerCase() === "transfer" &&
-        ev.decodedEvent.type === "event"
-    )
-    .map((item: any) => {
-      const { contract, decodedEvent } = item;
-      const filtered = decodedEvent?.params.filter(
-        (param) => param.name === "tokenId" || param.name === "value"
-      );
-      const tokenId = filtered.length > 0 ? filtered[0].value : "";
+  return logs.reduce((acc, log) => {
+    const { decodedEvent, address } = log;
 
-      return {
-        contract,
-        tokenId,
-      };
-    })
-    .reduce((acc, obj) => {
-      const key = obj?.contract;
-      acc[key] = acc[key] || [];
-      acc[key].push(parseInt(obj?.tokenId));
+    // We only care about 'Transfer' events from ERC721/ERC1155 contracts
+    if (
+      !decodedEvent ||
+      decodedEvent.label.toLowerCase() !== "transfer" ||
+      decodedEvent.type !== "event"
+    ) {
       return acc;
-    }, {});
+    }
 
-  return logDataset;
+    const tokenIdParam = decodedEvent.params.find(
+      (param: any) => param.name === "tokenId" || param.name === "value"
+    );
+
+    if (tokenIdParam) {
+      const contractAddress = address.toLowerCase();
+      if (!acc[contractAddress]) {
+        acc[contractAddress] = [];
+      }
+      acc[contractAddress].push(parseInt(tokenIdParam.value, 10));
+    }
+
+    return acc;
+  }, {} as Record<string, number[]>);
 };
 
 export default {
-  init,
+  start: startMoralis,
   isTransactionSuccess,
   isTokenAlreadyInAddress,
   matchTransactionTokens,

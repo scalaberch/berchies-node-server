@@ -1,6 +1,8 @@
 import _ from 'lodash';
 import moment from 'moment-timezone';
-import { cache, isCacheActive } from '@server/modules/cache';
+// import { cache, isCacheActive } from '@server/modules/cache';
+import Cache, { isCacheActive } from "@server/modules/cache"
+
 import { getEnvVariable as getEnv, getEnvVariable, isDevEnv } from '../../env';
 import jwt, { Algorithm } from 'jsonwebtoken';
 import {
@@ -13,6 +15,7 @@ import {
 import Log from '@server/logs';
 import { generateUUID7 } from '@server/lib/strings';
 import { DateTimeFormats, getCurrentTimestamp } from '@server/lib/datetime';
+import { JWTAuthClass } from './module';
 
 // tokens and expiry configuration
 export const ACCESS_SECRET: string = getEnv('JWT_ACCESS_SECRET', false, '');
@@ -178,7 +181,7 @@ export const generateToken = (
  * @param sub - the user id
  * @param payload - extra payload data. force it to be {} if nothing
  * @param issuer - issuer url
- * @param audience - target audience
+ * @param audience - target audience (i.e. if web or mobile-native-app)
  * @returns
  */
 export const generateAccessToken = (
@@ -236,7 +239,6 @@ const isTokenInvalid = async (token: string, tokenType: JWTKind) => {
   const prefix =
     tokenType === JWTKind.refresh ? invalidRefreshTokenPrefix : invalidAccessTokenPrefix;
 
-  const Cache = cache();
   const keyExists = await Cache.keyExists(`${prefix}:${token}`);
   return keyExists;
 };
@@ -267,7 +269,6 @@ const makeTokenInvalid = async (token: string, tokenType: JWTKind) => {
     const exp = _.get(decoded, 'exp', 0);
     const remainingTime = exp - now;
 
-    const Cache = cache();
     await Cache.set(`${prefix}:${token}`, jti, { EX: remainingTime });
   } catch (error) {
     Log.error('Token invalidation error: ', error);
@@ -310,7 +311,7 @@ export const makeAccessTokenInvalid = (accessToken: string) =>
  * @returns
  */
 export const makeRefreshTokenInvalid = (refreshToken: string) =>
-  makeTokenInvalid(refreshToken, JWTKind.access);
+  makeTokenInvalid(refreshToken, JWTKind.refresh);
 
 /**
  * calculates the remaining time of a jwt data
@@ -325,6 +326,13 @@ export const calculateRemainingTime = (jwtData: Partial<BaseJWTPayload>) => {
   return remaining > 0 ? remaining : 0;
 };
 
+/**
+ * generate new access token from refresh token. duh.
+ * 
+ * @param refreshToken 
+ * @param payload 
+ * @returns 
+ */
 export const generateNewAccessTokenFromRefreshToken = async (
   refreshToken: string | Partial<BaseJWTPayload> = '',
   payload = {},
@@ -332,8 +340,8 @@ export const generateNewAccessTokenFromRefreshToken = async (
   if (typeof refreshToken === 'string') {
     const validatedRefreshToken = await validateRefreshToken(refreshToken);
     if (!validatedRefreshToken.valid) {
-      // refresh token is not valid!
-      return '';
+      // Throw an error with the specific reason for failure
+      throw new Error(validatedRefreshToken.errorType);
     }
 
     refreshToken = validatedRefreshToken.data;
@@ -344,49 +352,4 @@ export const generateNewAccessTokenFromRefreshToken = async (
   return accessToken;
 };
 
-export class JWTAuthClass {
-  private accessToken: string;
-  private refreshToken: string;
-  private valid: boolean;
-
-  constructor() {
-    this.accessToken = '';
-    this.refreshToken = '';
-    this.valid = false;
-  }
-
-  getAccessToken() {
-    return this.accessToken;
-  }
-
-  getRefreshToken() {
-    return this.refreshToken;
-  }
-
-  toObject() {}
-
-  isAccessTokenExpired() {}
-
-  isRefreshTokenExpired() {}
-
-  generate(payload = {}) {}
-
-  refresh(payload = {}) {
-    // const { jti, sub, iss, player, aud } = refreshTokenData;
-    // // Issue access token.
-    // const { token: accessToken, jti: accessJti } = generateAccessToken(
-    //   sub,
-    //   payload,
-    //   iss,
-    //   aud,
-    // );
-    // return accessToken;
-  }
-
-  private calculateRemainingTime(jwtData: BaseJWTPayload) {
-    const now = Number(getCurrentTimestamp(DateTimeFormats.seconds));
-    const { exp } = jwtData;
-    const remaining = exp - now;
-    return remaining > 0 ? remaining : 0;
-  }
-}
+export default JWTAuthClass;

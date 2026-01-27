@@ -19,3 +19,9 @@ export interface RedisSetOptions {
   GET?: boolean; // return the old string stored at key, or "undefined" if key did not exist
 }
 
+export const CacheConfig = {
+  host: CACHE_HOST,
+  port: CACHE_PORT,
+  username: CACHE_USER,
+  password: CACHE_PASS,
+}

@@ -291,8 +291,6 @@ export const wipeDatabase = async (connection: mysql.Connection, dbName: string)
 
     // 4. Re-enable Foreign Key checks
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');
-
-    console.log(`🧹 Database ${dbName} wiped clean.`);
   } catch (error) {
     console.error('❌ Error wiping database:', error);
     throw error;

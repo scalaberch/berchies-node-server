@@ -1,4 +1,4 @@
-import { CACHE_USER, CACHE_HOST, CACHE_PASS, CACHE_PORT } from './defines';
+import { CacheConfig } from './defines';
 
 /**
  * auto-generates the redis url
@@ -6,11 +6,25 @@ import { CACHE_USER, CACHE_HOST, CACHE_PASS, CACHE_PORT } from './defines';
  * @returns {string}
  */
 export const generateUrl = (): string => {
-  // let credentials = [REDIS_USER, REDIS_PASSWORD].join('@');
-  const hasUser = CACHE_USER.length > 0;
-  const credentials = `${hasUser ? CACHE_USER : ''}${
-    CACHE_PASS.length > 0 ? `${hasUser ? ':' : ''}${CACHE_PASS}` : ''
-  }`;
-  const url = `redis://${credentials.length > 0 ? `${credentials}@` : ''}${CACHE_HOST}:${CACHE_PORT}`;
-  return url;
+  const { host, port, username, password } = CacheConfig;
+
+  let authPart = '';
+  if (username && password) {
+    authPart = `${username}:${password}@`;
+  } else if (username) {
+    authPart = `${username}@`;
+  } else if (password) {
+    // Redis allows password without username, e.g., redis://:password@host:port
+    authPart = `:${password}@`;
+  }
+
+  return `redis://${authPart}${host}:${port}`;
 };
+
+/**
+ * 
+ * @returns {void}
+ */
+export const setupTestCache = () => {
+  CacheConfig.host = '127.0.0.1';
+}

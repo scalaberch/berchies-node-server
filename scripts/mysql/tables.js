@@ -15,13 +15,17 @@ const classTemplate = `/**
 **/
 
 import { <modelName> as BaseInterface } from '../mysql.defines';
-import MysqlTable, { PrimaryKeyType, MysqlInsertResult, TableName } from "@server/modules/mysql/table";
+import MysqlTable, { PrimaryKeyType, MysqlInsertResult, TableName, WhereCondition, SortCondition } from "@server/modules/mysql/table";
 
 export const tableName = "<tableName>";
 export const tablePrimaryKey = "<primaryKey>";
 
 export interface <modelName>Interface extends Partial<BaseInterface> {}
 export type <modelName>Field = keyof <modelName>Interface;
+
+export type <modelName>WhereCondition = WhereCondition & {
+  [K in <modelName>Field]?: any;
+};
 
 export class <modelName>MysqlTable extends MysqlTable {
   protected primaryKeyType: PrimaryKeyType = '<pkType>';
@@ -35,6 +39,15 @@ export class <modelName>MysqlTable extends MysqlTable {
 
   public create(params: <modelName>Interface): Promise<<modelName>Interface | null> {
    return super.create(params)
+  }
+
+  public selectWhere(
+    condition: <modelName>WhereCondition = {},
+    selectFields = [],
+    sortCondition: SortCondition = {},
+    limit = 100,
+  ) {
+    return super.selectWhere(condition, selectFields, sortCondition, limit);
   }
 
   //public updateById(id: PrimaryKeyType, params: <modelName>Interface) {
@@ -299,7 +312,7 @@ const dbConfig = {
   port: process.env.MYSQL_PORT,
 };
 
-if (process.env.ENV === 'dev') {
+if (process.env.ENV === 'dev' ||process.env.ENV === 'local') {
   if (!isRunningInDocker()) {
     dbConfig.host = '127.0.0.1';
   }

@@ -1,28 +1,38 @@
-import IP from "ip";
-import cp from "child_process";
-import os from "os";
-import crypto from "crypto";
-import fs from "fs";
-import axios from "axios";
+import IP from 'ip';
+import cp from 'child_process';
+import os from 'os';
+import crypto from 'crypto';
+import fs from 'fs';
+import axios from 'axios';
+import path from 'path';
+import Log from '@server/logs';
 
+/**
+ *
+ * @deprecated
+ * @returns
+ */
 export const getEnv = () => {
-  const env = process.env.ENV || "dev";
+  const env = process.env.ENV || 'dev';
   return env;
 };
 
+/**
+ *
+ * @deprecated
+ * @returns
+ */
 export const getEnvTag = () => {
   const env = getEnv();
-  let tag = "";
-
-  if (env === "") {
-    tag = "dev";
-  } else if (env === "prod" || env === "production") {
-    tag = "";
-  } else {
-    tag = env;
+  switch (env) {
+    case 'prod':
+    case 'production':
+      return '';
+    case '':
+      return 'dev';
+    default:
+      return env;
   }
-
-  return `${tag}`;
 };
 
 /**
@@ -32,84 +42,137 @@ export const getEnvTag = () => {
  */
 export const getMyIPAddress = () => IP.address();
 
+/**
+ * Retrieves the Git user name configured for the current repository.
+ *
+ * @returns The Git user name as a string, or an empty string if not found or an error occurs.
+ */
 export const getGitUser = () => {
-  const prettyname = ""; // cp.execSync("git config user.name").toString().trim();
-  return prettyname;
-};
-
-export const getServerName = () => {
-  switch (process.platform) {
-    case "win32":
-      return process.env.COMPUTERNAME;
-    case "darwin":
-      return cp.execSync("scutil --get ComputerName").toString().trim();
-    case "linux":
-      // const prettyname = cp.execSync("hostnamectl --pretty").toString().trim();
-      const prettyname = cp.execSync("uname -n").toString().trim();
-      return prettyname === "" ? os.hostname() : prettyname;
-    default:
-      return os.hostname();
+  try {
+    // This can fail if not in a git repository.
+    return cp.execSync('git config user.name').toString().trim();
+  } catch {
+    return '';
   }
 };
 
+/**
+ * Retrieves the server's name based on the operating system.
+ * It attempts to use platform-specific methods for a more descriptive name,
+ * falling back to `os.hostname()` if specific methods fail or return an empty value.
+ *
+ * @returns The server's name as a string.
+ */
+export const getServerName = () => {
+  try {
+    switch (process.platform) {
+      case 'win32':
+        return process.env.COMPUTERNAME || os.hostname();
+      case 'darwin':
+        return cp.execSync('scutil --get ComputerName').toString().trim();
+      case 'linux': {
+        const prettyname = cp.execSync('uname -n').toString().trim();
+        return prettyname || os.hostname();
+      }
+      default:
+        return os.hostname();
+    }
+  } catch (error: any) {
+    // If any of the platform-specific commands fail, fall back to os.hostname().
+    // Log the error for debugging purposes, but don't re-throw.
+    Log.error(`Failed to get server name using platform-specific command: ${error.message}`);
+    return os.hostname();
+  }
+};
+
+/**
+ * Encrypts a given input to a SHA256 hash.
+ * The input is stringified before hashing.
+ *
+ * @param input - The data to encrypt.
+ * @returns The SHA256 hash as a hex string.
+ */
 export const encryptToSha256 = (input: any) => {
-  return crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  return crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
 };
 
-export const sleep = (waitTime: number) => {
-  return new Promise((res) => {
-    setTimeout(() => {
-      return res(true);
-    }, waitTime);
-  });
+/**
+ * Pauses execution for a specified amount of time.
+ *
+ * @param waitTime - The time to wait in milliseconds.
+ * @returns A promise that resolves after the specified wait time.
+ */
+export const sleep = (waitTime: number): Promise<void> => {
+  return new Promise((resolve) => setTimeout(resolve, waitTime));
 };
 
-export const sleepRandomly = async (minWaitTime: number, maxWaitTime: number) => {
+/**
+ * Pauses execution for a random amount of time within a specified range.
+ *
+ * @param minWaitTime - The minimum time to wait in milliseconds.
+ * @param maxWaitTime - The maximum time to wait in milliseconds.
+ * @returns A promise that resolves after the random wait time.
+ */
+export const sleepRandomly = (minWaitTime: number, maxWaitTime: number): Promise<void> => {
   const waitTime = randomNumber(minWaitTime, maxWaitTime);
-  return await sleep(waitTime);
+  return sleep(waitTime);
 };
 
+/**
+ * A utility function to create a rejected promise with a consistent error object shape.
+ *
+ * @param msg - The error message.
+ * @returns A rejected promise with the error object `{ error: msg }`.
+ */
 export const promiseReject = (msg: string) => {
   return Promise.reject({ error: msg });
 };
 
-
 /**
- * 
+ *
  * @deprecated please use server/lib/files.getFiles()
- * @param dir 
- * @param files 
- * @param except 
- * @returns 
+ * @param dir
+ * @param files
+ * @param except
+ * @returns
  */
 export const fetchAllFiles = (
   dir: string,
   files: Array<string> = [],
-  except: Array<string> = []
+  except: Array<string> = [],
 ) => {
-  const fileList = fs.readdirSync(dir);
-
-  for (const file of fileList) {
-    const name = `${dir}/${file}`;
-
-    if (fs.statSync(name).isDirectory()) {
-      fetchAllFiles(name, files);
-    } else if (!except.includes(name)) {
-      files.push(name);
+  try {
+    const fileList = fs.readdirSync(dir);
+    for (const file of fileList) {
+      const name = path.join(dir, file);
+      if (fs.statSync(name).isDirectory()) {
+        fetchAllFiles(name, files, except);
+      } else if (!except.includes(name)) {
+        files.push(name);
+      }
     }
+  } catch (error) {
+    console.error(`Error reading directory ${dir}:`, error);
   }
-
   return files;
 };
 
+/**
+ * Creates a perpetual task runner that executes a function at a regular interval.
+ *
+ * @param doThis - The asynchronous or synchronous function to execute on each tick.
+ * @param startImmediately - If true, the task runner starts immediately.
+ * @param overrideTickTime - The interval in milliseconds between ticks. Defaults to 100ms.
+ * @returns An object with `start` and `stop` methods to control the runner.
+ */
 export const doThisPerpetually = (
   doThis: () => Promise<any> | any,
   startImmediately: boolean = false,
-  overrideTickTime?: number
+  overrideTickTime?: number,
 ) => {
   let processing = false;
   let started = false;
-  let handler: NodeJS.Timeout;
+  let handler: NodeJS.Timeout | null = null;
   const tickTime = !isNaN(overrideTickTime) ? overrideTickTime : 100; // tick every 100ms
 
   // define handler function
@@ -146,7 +209,7 @@ export const doThisPerpetually = (
       if (!started) {
         return;
       }
-      clearInterval(handler);
+      if (handler) clearInterval(handler);
     },
   };
 };
@@ -167,10 +230,10 @@ export const pickRandomFromArray = (array: any[]) => {
 
 /**
  * helper function to check if value exists in array
- * 
- * @param value 
- * @param array 
- * @returns 
+ *
+ * @param value
+ * @param array
+ * @returns
  */
 export const inArray = (value: any, array: any[]) => array.includes(value);
 
@@ -214,7 +277,7 @@ export const waitUntil = (conditionFn: () => boolean | Promise<boolean>) => {
 export const isValidJSON = (jsonString: string) => {
   try {
     let json = JSON.parse(jsonString);
-    let validity = json && typeof json === "object";
+    let validity = json && typeof json === 'object';
     return validity;
   } catch (e) {
     return false;
@@ -252,11 +315,9 @@ export const ParseNumber = (num: any, fallbackNumber?: number) => {
  */
 export const getMissingItemsOnFirstArrayFromSecondArray = (
   firstArray: Array<any>,
-  secondArray: Array<any>
+  secondArray: Array<any>,
 ) => {
-  return firstArray.length === 0
-    ? []
-    : firstArray.filter((cue) => !secondArray.includes(cue));
+  return firstArray.length === 0 ? [] : firstArray.filter((cue) => !secondArray.includes(cue));
 };
 
 /**
@@ -266,7 +327,7 @@ export const getMissingItemsOnFirstArrayFromSecondArray = (
  * @param append
  * @returns
  */
-export const decimalToFixedString = (number: number, maxPlaces = 2, append = "") => {
+export const decimalToFixedString = (number: number, maxPlaces = 2, append = '') => {
   const fixedNumber = number.toFixed(maxPlaces);
   const formatted = parseFloat(fixedNumber).toString();
   return `${formatted}${append}`;
@@ -304,8 +365,7 @@ export const chance = (probability: number) => {
  * @param max
  * @returns
  */
-export const secureRandomNumber = (min: number, max: number) =>
-  crypto.randomInt(min, max + 1);
+export const secureRandomNumber = (min: number, max: number) => crypto.randomInt(min, max + 1);
 
 /**
  * gets the key from an object given its value.
@@ -314,11 +374,10 @@ export const secureRandomNumber = (min: number, max: number) =>
  * @param value
  * @returns
  */
-export const getKeyByValue = <T extends Record<string, unknown>>(
+export const getKeyByValue = <T extends Record<PropertyKey, PropertyKey>>(
   obj: T,
-  value: T[keyof T]
-): keyof T | undefined =>
-  (Object.keys(obj) as (keyof T)[]).find((key) => obj[key] === value);
+  value: T[keyof T],
+): keyof T | undefined => (Object.keys(obj) as (keyof T)[]).find((key) => obj[key] === value);
 
 export const remotePathExists = async (path: string) => {
   try {
@@ -342,9 +401,3 @@ export const parseJSON = (jsonString: string, makeFallbackValueNull = true) => {
 
   return value;
 };
-
-/**
- * export default
- *
- */
-export default {};

@@ -8,6 +8,9 @@ import { LoggingConfig, DefaultLogType, FormattedPayload, DefaultLoggingConfig }
 import ConsoleTransport from './transports/console';
 import CreateLogRotateFile from './transports/file';
 
+import { Server } from '../index';
+import { AppEnvironments, NodeEnvironments } from '@server/env';
+
 /**
  * application logging system
  *
@@ -26,7 +29,12 @@ class AppLog {
   private fileTransport: TransportStream;
   private remoteTransport;
 
+  // overrides
+  private suppressLogs: boolean;
+
   constructor(config: LoggingConfig) {
+    this.suppressLogs = false;
+
     // set base transports
     this.consoleTransport = ConsoleTransport(config.defaultLogType);
 
@@ -85,7 +93,7 @@ class AppLog {
    *
    * @returns {void}
    */
-  public initialize(config: ServerConfig) {
+  public initialize(config: ServerConfig, server: Server) {
     // set colors here!!!
     winston.addColors({
       critical: 'red bold',
@@ -96,6 +104,14 @@ class AppLog {
       debug: 'white',
       ws: 'magenta',
     });
+
+    const serverEnv = server.environment;
+    if (
+      serverEnv.getNodeEnv() === NodeEnvironments.test ||
+      serverEnv.getEnv() === AppEnvironments.ci
+    ) {
+      this.suppressLogs = true;
+    }
 
     // console.log(config);
   }
@@ -142,6 +158,11 @@ class AppLog {
     meta: any = {},
     showTimestamp = false,
   ) {
+    // override if we write the logs
+    if (this.suppressLogs) {
+      return;
+    }
+
     const payload = { level, message, meta };
     logGroup.log(payload);
   }
