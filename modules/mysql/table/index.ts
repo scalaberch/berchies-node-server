@@ -568,8 +568,10 @@ export default class MysqlTable {
       const selecter = sql<string>`BIN_TO_UUID(${sql.ref(pk)})`;
       pageQuery = pageQuery.select([selecter.as(pk)]);
     }
-    pageQuery = pageQuery.limit(pageCount).offset(offset);
 
+    // setup page limit and offset
+    pageQuery = pageQuery.limit(pageCount).offset(offset);
+    
     // execute the actual query
     const items = await pageQuery.execute();
 

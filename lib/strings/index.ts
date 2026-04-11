@@ -266,21 +266,30 @@ export const capitalizeString = (str: string) => {
 };
 
 /**
- * converts a UUID string to binary
+ * Converts a UUID string into its binary representation.
  *
- * @param uuid
- * @returns
+ * @param {string} uuid - The UUID string in standard 8-4-4-4-12 format.
+ * @returns {Buffer} A 16-byte Buffer representing the UUID, or an empty Buffer if the UUID is invalid.
  */
 export const uuidToBin = (uuid: string): Buffer => {
   return Buffer.from(uuid.replace(/-/g, ''), 'hex');
 };
 
 /**
- * convert a binary stream to UUID
- * 
- * @param bin 
- * @returns 
+ * Converts a binary stream to a UUID string.
+ *
+ * @param {Buffer} bin - The 16-byte UUID binary value.
+ * @returns {string} The formatted UUID string.
  */
 export const binToUuid = (bin: Buffer): string => {
   return bin.toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
 };
+
+/**
+ * Checks whether a value is a valid UUID string.
+ *
+ * @param {string} value - The value to validate.
+ * @returns {boolean} True when the value is a properly formatted UUID, false otherwise.
+ */
+export const isValidUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);

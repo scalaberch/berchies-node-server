@@ -1,12 +1,11 @@
+require('dotenv').config();
+
 const _ = require('lodash');
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
-require('dotenv').config();
-
 const timestampFields = ['created_at', 'updated_at', 'deleted_at'];
-
 const classTemplate = `/**
 *
 * Auto-generated model for table <tableName>
@@ -47,7 +46,11 @@ export class <modelName>MysqlTable extends MysqlTable {
     sortCondition: SortCondition = {},
     limit = 100,
   ) {
-    return super.selectWhere(condition, selectFields, sortCondition, limit);
+    return super.selectWhere(condition, selectFields, sortCondition, limit) as Promise<<modelName>Interface[]>;
+  }
+
+  public selectById(id: any, selectFields: <modelName>Field[] = []) {
+    return super.selectById(id, selectFields) as Promise<<modelName>Interface | null>;
   }
 
   //public updateById(id: PrimaryKeyType, params: <modelName>Interface) {
@@ -312,7 +315,7 @@ const dbConfig = {
   port: process.env.MYSQL_PORT,
 };
 
-if (process.env.ENV === 'dev' ||process.env.ENV === 'local') {
+if (process.env.ENV === 'dev' || process.env.ENV === 'local') {
   if (!isRunningInDocker()) {
     dbConfig.host = '127.0.0.1';
   }
