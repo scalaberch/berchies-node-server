@@ -14,9 +14,19 @@ const definesRel = 'src/database/mysql.defines.ts';
 const definesPath = path.join(root, definesRel);
 
 function isRunningInDocker() {
+  if (process.env.RUNNING_IN_DOCKER === '1') {
+    return true;
+  }
   try {
+    if (fs.existsSync('/.dockerenv')) {
+      return true;
+    }
     const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
-    return /docker|kubepods/i.test(cgroup);
+    if (/docker|kubepods/i.test(cgroup)) {
+      return true;
+    }
+    const selfCgroup = fs.readFileSync('/proc/self/cgroup', 'utf8');
+    return selfCgroup.split('\n').some((line) => /docker|kubepods|containerd/i.test(line));
   } catch {
     return false;
   }
