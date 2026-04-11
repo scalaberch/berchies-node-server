@@ -1,4 +1,5 @@
 import { getEnvVariable } from '@server/env';
+import { resolveMysqlHost } from '@server/modules/mysql/resolveMysqlHost';
 import { Kysely, MysqlDialect, sql } from 'kysely';
 
 
@@ -37,7 +38,7 @@ export interface MysqlConfig {
  * Define the basic server configuration
  *
  */
-const host = getEnvVariable('MYSQL_HOST', false, 'localhost') as string;
+const host = resolveMysqlHost();
 const user = getEnvVariable('MYSQL_USER', false, 'mysql') as string;
 const password = getEnvVariable('MYSQL_PASS', false, '') as string;
 const port = getEnvVariable('MYSQL_PORT', true, 3306) as number;

@@ -3,7 +3,7 @@ import Modules, { ServerModules } from './modules/index';
 import { ServerConfig, serverTimezone, SHUTDOWN_FORCE_TIMEOUT } from './defines';
 import { isRunningInTypeScript } from './lib/files';
 import { currentDir } from './lib/files';
-import ServerEnv, { ServerEnvironment } from './env';
+import ServerEnv, { ServerEnvironment, isProductionApplication as checkProductionApplication } from './env';
 
 import Main from '@src/main';
 import Config from '@src/config';
@@ -105,6 +105,14 @@ export class Server {
   }
 
   /**
+   * True when both `ENV` and `NODE_ENV` are production (strict application prod mode).
+   * Same logic as `isProductionApplication` exported from `./env`.
+   */
+  public isProductionApplication(): boolean {
+    return checkProductionApplication();
+  }
+
+  /**
    * attach node.js process handlers
    *
    * @returns
@@ -148,3 +156,5 @@ export class Server {
 
 // pack up server and export as a singleton
 export default new Server();
+
+export { isProductionApplication } from './env';

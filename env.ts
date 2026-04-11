@@ -176,6 +176,25 @@ export const isProdEnv = isProductionEnv; // just an alias
  */
 export const getEnvVar = getEnvVariable;
 
+/**
+ * True when both `ENV` (app) and `NODE_ENV` (Node) are `production`.
+ * Use for guards (e.g. destructive scripts) that must not run in full prod mode.
+ */
+export const isProductionApplication = (): boolean => {
+  const appEnv = String(getEnvVariable('ENV', false, '')).toLowerCase();
+  const nodeEnv = String(getEnvVariable('NODE_ENV', false, '')).toLowerCase();
+  return appEnv === AppEnvironments.production && nodeEnv === NodeEnvironments.production;
+};
+
+/**
+ * True when `ENV` is `local` or `dev` (case-insensitive). Used by destructive DB scripts
+ * (e.g. truncate all application tables); refuse in staging, CI, production, etc.
+ */
+export const isDbClearAllowedEnvironment = (): boolean => {
+  const appEnv = String(getEnvVariable('ENV', false, '')).toLowerCase();
+  return appEnv === AppEnvironments.local || appEnv === 'dev';
+};
+
 //////////////////////////////////////////
 //////////////////////////////////////////
 //////////////////////////////////////////

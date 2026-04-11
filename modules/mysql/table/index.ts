@@ -1,5 +1,6 @@
 import { sql, OperatorMap, PaginationResult, PaginationSettings } from '../defines';
 import { binToUuid, generateUUID7, uuidToBin } from '@server/lib/strings';
+import { isMysqlUuidAuto } from '../uuidAuto';
 import Mysql from '../index';
 import {
   applyDynamicFilters,
@@ -57,6 +58,11 @@ export default class MysqlTable {
   protected updatedTimestampFld = 'updated_at';
   protected createdTimestampFld = 'created_at';
 
+  /**
+   * When `MYSQL_UUID_AUTO` infers UUID columns, skip these field names (e.g. non-UUID BINARY(16)).
+   */
+  protected uuidAutoSkipFields: string[] = [];
+
   constructor(tableName: string, primaryKey: string, alias = '') {
     this.tableName = tableName;
     this.primaryKey = primaryKey;
@@ -106,6 +112,62 @@ export default class MysqlTable {
    */
   public isPrimaryKeyUUID() {
     return this.primaryKeyType === 'uuid';
+  }
+
+  /**
+   * All binary UUID-like columns used for **writes** and **WHERE** string→`UUID_TO_BIN` coercion.
+   * When `uuidFields` is empty: PK plus every `id` / `*_id` field name on the model.
+   */
+  private getUuidWireFields(): string[] {
+    if (!this.isPrimaryKeyUUID()) {
+      return [];
+    }
+    const pk = this.getPrimaryKey();
+    const skip = new Set(this.uuidAutoSkipFields);
+    let cols: string[];
+    if (this.uuidFields.length > 0) {
+      cols = [pk, ...this.uuidFields];
+    } else {
+      cols = this.fields.filter((f) => f === pk || f.endsWith('_id'));
+    }
+    return [...new Set(cols.filter((c) => this.isValidField(c) && !skip.has(c)))];
+  }
+
+  /**
+   * Columns to decode BINARY(16) → UUID string on **SELECT** results.
+   * When `MYSQL_UUID_AUTO` is off: only the primary key (legacy). When on: same as wire fields.
+   */
+  public getUuidCoercedFields(): string[] {
+    if (!this.isPrimaryKeyUUID()) {
+      return [];
+    }
+    const pk = this.getPrimaryKey();
+    if (!isMysqlUuidAuto()) {
+      return this.uuidAutoSkipFields.includes(pk) ? [] : [pk];
+    }
+    return this.getUuidWireFields();
+  }
+
+  private mapRowBinaryUuidsToStrings<R extends Record<string, unknown>>(row: R): R {
+    const out = { ...row } as Record<string, unknown>;
+    for (const col of this.getUuidCoercedFields()) {
+      const v = out[col];
+      if (v instanceof Buffer && (v as Buffer).length === 16) {
+        out[col] = binToUuid(v as Buffer);
+      }
+    }
+    return out as R;
+  }
+
+  private coerceBinaryUuidStringsForWrite(record: Record<string, any>): Record<string, any> {
+    const next = { ...record };
+    for (const col of this.getUuidWireFields()) {
+      const v = next[col];
+      if (typeof v === 'string' && v.length > 0) {
+        next[col] = uuidToBin(v);
+      }
+    }
+    return next;
   }
 
   /**
@@ -203,13 +265,13 @@ export default class MysqlTable {
     let filteredQuery: any = qb;
 
     const prepareEntry = (column: string, val: any) => {
-      const isPk = column === pk && isUUID;
       // Ensure we are checking for a literal null, not a string "null"
       const isValueNull = val === null;
-      const shouldTransform = isPk && !isValueNull && typeof val === 'string';
+      const isUuidBinCol = isUUID && this.getUuidWireFields().includes(column);
+      const shouldTransform = isUuidBinCol && !isValueNull && typeof val === 'string';
 
       return {
-        columnRef: isPk ? sql.ref(column) : column,
+        columnRef: column === pk && isUUID ? sql.ref(column) : column,
         value: shouldTransform ? sql`UUID_TO_BIN(${val})` : val,
         isValueNull,
       };
@@ -251,7 +313,8 @@ export default class MysqlTable {
    */
   private prepareInsertRecord(input: any, uuid: string): Record<string, any> {
     const now = getCurrentTimestamp();
-    const record = { ...this.buildParameters(input) };
+    let record = { ...this.buildParameters(input) };
+    record = this.coerceBinaryUuidStringsForWrite(record);
     const pk = this.getPrimaryKey();
 
     // Primary Key Injection
@@ -349,27 +412,13 @@ export default class MysqlTable {
     // set the select fields
     stmt = selectFields.length === 0 ? stmt.selectAll() : stmt.select(selectFields);
 
-    // override uuid if so
-    if (this.isPrimaryKeyUUID()) {
-      if (condition[pk]) {
-        condition[pk] = uuidToBin(condition[pk]);
-      }
-      // const selecter = sql<string>`BIN_TO_UUID(${sql.ref(pk)})`;
-      // selectStmt = selectStmt.select([selecter.as(pk)]);
-    }
-
     // append the limit
     stmt = stmt.limit(limit);
 
     // run said query
     const results = await stmt.execute();
 
-    const cleanedUpResults = results.map((result) => {
-      if (this.isPrimaryKeyUUID()) {
-        result[pk] = binToUuid(result[pk]);
-      }
-      return { ...result };
-    });
+    const cleanedUpResults = results.map((result) => this.mapRowBinaryUuidsToStrings(result));
 
     return cleanedUpResults; // selectStmt.compile().sql;
   }
@@ -459,7 +508,7 @@ export default class MysqlTable {
       any
     >;
 
-    const paramUpdateQuery = updateQuery.set(updateParameters);
+    const paramUpdateQuery = updateQuery.set(this.coerceBinaryUuidStringsForWrite({ ...updateParameters }));
     const updateResult = await paramUpdateQuery.executeTakeFirst();
 
     return {
@@ -563,17 +612,13 @@ export default class MysqlTable {
 
     // clean up main query for uuid and page and offset
     let pageQuery = selectFields.length > 0 ? query.select(selectFields) : query.selectAll();
-    if (this.isPrimaryKeyUUID()) {
-      const pk = this.getPrimaryKey();
-      const selecter = sql<string>`BIN_TO_UUID(${sql.ref(pk)})`;
-      pageQuery = pageQuery.select([selecter.as(pk)]);
-    }
 
     // setup page limit and offset
     pageQuery = pageQuery.limit(pageCount).offset(offset);
-    
+
     // execute the actual query
-    const items = await pageQuery.execute();
+    const rawItems = await pageQuery.execute();
+    const items = rawItems.map((row) => this.mapRowBinaryUuidsToStrings(row));
 
     // collect the other pagination data
     const totalPages = Math.ceil(totalDocs / pageCount);
