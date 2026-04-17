@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 import { v4 as uuidv4, v7 as uuidv7 } from 'uuid';
 
+export { randomPhilippinesMobile } from './phone';
+export { randomPhilippinesAddress } from './address';
+
 /**
  * generate a random string
  *
