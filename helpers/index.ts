@@ -8,9 +8,10 @@ import path from 'path';
 import Log from '@server/logs';
 
 /**
+ * Returns the logical environment name from `process.env.ENV`, defaulting to `'dev'`.
  *
- * @deprecated
- * @returns
+ * @deprecated Prefer a single env/config abstraction for deployment stage.
+ * @returns Environment string (e.g. `dev`, `prod`).
  */
 export const getEnv = () => {
   const env = process.env.ENV || 'dev';
@@ -18,9 +19,11 @@ export const getEnv = () => {
 };
 
 /**
+ * Maps {@link getEnv} to a short tag suitable for labels or non-production suffixes.
+ * Production resolves to an empty string; empty env resolves to `'dev'`.
  *
- * @deprecated
- * @returns
+ * @deprecated Prefer explicit env/config instead of string tags.
+ * @returns A tag string, or `''` for production.
  */
 export const getEnvTag = () => {
   const env = getEnv();
@@ -36,9 +39,9 @@ export const getEnvTag = () => {
 };
 
 /**
- * gets my ip address
+ * Returns this host’s primary IPv4 address using the `ip` package.
  *
- * @returns
+ * @returns The detected IP address string.
  */
 export const getMyIPAddress = () => IP.address();
 
@@ -86,11 +89,10 @@ export const getServerName = () => {
 };
 
 /**
- * Encrypts a given input to a SHA256 hash.
- * The input is stringified before hashing.
+ * Computes a SHA-256 digest of `JSON.stringify(input)` and returns it as a hex string.
  *
- * @param input - The data to encrypt.
- * @returns The SHA256 hash as a hex string.
+ * @param input - Value to serialize and hash (any JSON-serializable input).
+ * @returns Lowercase hex SHA-256 string.
  */
 export const encryptToSha256 = (input: any) => {
   return crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -119,22 +121,24 @@ export const sleepRandomly = (minWaitTime: number, maxWaitTime: number): Promise
 };
 
 /**
- * A utility function to create a rejected promise with a consistent error object shape.
+ * Returns a rejected promise carrying `{ error: msg }` for a consistent consumer shape.
  *
- * @param msg - The error message.
- * @returns A rejected promise with the error object `{ error: msg }`.
+ * @param msg - Error message string.
+ * @returns A promise rejected with `{ error: string }`.
  */
 export const promiseReject = (msg: string) => {
   return Promise.reject({ error: msg });
 };
 
 /**
+ * Recursively collects absolute file paths under `dir`, mutating the `files` accumulator.
+ * Skips paths listed in `except`.
  *
- * @deprecated please use server/lib/files.getFiles()
- * @param dir
- * @param files
- * @param except
- * @returns
+ * @deprecated Use `server/lib/files.getFiles()` instead.
+ * @param dir - Root directory to scan.
+ * @param files - Accumulator array (default fresh `[]`).
+ * @param except - Absolute paths to exclude from results.
+ * @returns The same `files` array with discovered paths appended.
  */
 export const fetchAllFiles = (
   dir: string,
@@ -163,7 +167,8 @@ export const fetchAllFiles = (
  * @param doThis - The asynchronous or synchronous function to execute on each tick.
  * @param startImmediately - If true, the task runner starts immediately.
  * @param overrideTickTime - The interval in milliseconds between ticks. Defaults to 100ms.
- * @returns An object with `start` and `stop` methods to control the runner.
+ * @returns Control handle: `handler` (interval id or null), `start()` to begin the interval,
+ *   and `stop()` to clear it. Skips a tick if the previous run is still in progress.
  */
 export const doThisPerpetually = (
   doThis: () => Promise<any> | any,
@@ -215,10 +220,10 @@ export const doThisPerpetually = (
 };
 
 /**
- * pick a random element from array
+ * Returns a random element from a non-empty array, or `null` if the array is empty.
  *
- * @param array
- * @returns
+ * @param array - Source array.
+ * @returns A random element, or `null` when `array.length === 0`.
  */
 export const pickRandomFromArray = (array: any[]) => {
   if (array.length === 0) {
@@ -229,18 +234,19 @@ export const pickRandomFromArray = (array: any[]) => {
 };
 
 /**
- * helper function to check if value exists in array
+ * Returns whether `value` is included in `array` (same semantics as `Array.prototype.includes`).
  *
- * @param value
- * @param array
- * @returns
+ * @param value - Needle.
+ * @param array - Haystack.
+ * @returns `true` if present.
  */
 export const inArray = (value: any, array: any[]) => array.includes(value);
 
 /**
+ * Polls `conditionFn` once per second until it returns a truthy result or about 30 seconds elapse.
  *
- * @param condition
- * @returns
+ * @param conditionFn - Predicate evaluated each tick; may be async.
+ * @returns Resolves `true` if the condition became true; `false` if the max wait was exceeded.
  */
 export const waitUntil = (conditionFn: () => boolean | Promise<boolean>) => {
   const maxWaitingTime = 30; // 30 seconds wait time
@@ -269,10 +275,11 @@ export const waitUntil = (conditionFn: () => boolean | Promise<boolean>) => {
 };
 
 /**
- * checks if string is a valid json string.
+ * Returns whether `jsonString` parses as JSON to a non-null object (arrays count as objects).
  *
- * @deprecated
- * @param jsonString
+ * @deprecated Prefer `JSON.parse` in try/catch or a dedicated schema validator.
+ * @param jsonString - Raw JSON text.
+ * @returns `true` if parsing succeeds and the result is an object; otherwise `false`.
  */
 export const isValidJSON = (jsonString: string) => {
   try {
@@ -285,19 +292,21 @@ export const isValidJSON = (jsonString: string) => {
 };
 
 /**
+ * Returns whether `Number(value)` is finite (not `NaN`).
  *
- * @param value
- * @returns
+ * @param value - Value to test.
+ * @returns `true` if coercible to a valid number.
  */
 export const isANumber = (value: any) => {
   return !isNaN(Number(value));
 };
 
 /**
+ * Parses `num` with `Number()`; on `NaN`, returns `fallbackNumber` if it is a valid number, otherwise `0`.
  *
- * @param num
- * @param fallbackNumber
- * @returns
+ * @param num - Input to coerce.
+ * @param fallbackNumber - Optional fallback when `Number(num)` is `NaN`.
+ * @returns Parsed number or fallback/`0`.
  */
 export const ParseNumber = (num: any, fallbackNumber?: number) => {
   const n = Number(num);
@@ -308,10 +317,12 @@ export const ParseNumber = (num: any, fallbackNumber?: number) => {
 };
 
 /**
- * best used if you delete items from a list based on an input array
+ * Returns entries present in `firstArray` but not in `secondArray` (set difference: first minus second).
+ * Returns `[]` when `firstArray` is empty.
  *
- * @param firstArray
- * @param secondArray
+ * @param firstArray - Base list.
+ * @param secondArray - List whose elements are excluded from the result.
+ * @returns Filtered copy of elements only in `firstArray`.
  */
 export const getMissingItemsOnFirstArrayFromSecondArray = (
   firstArray: Array<any>,
@@ -321,11 +332,12 @@ export const getMissingItemsOnFirstArrayFromSecondArray = (
 };
 
 /**
+ * Formats a number with `toFixed`, strips trailing zeros via `parseFloat`, then appends `append`.
  *
- * @param number
- * @param maxPlaces
- * @param append
- * @returns
+ * @param number - Numeric value.
+ * @param maxPlaces - Decimal places for `toFixed` (default `2`).
+ * @param append - Suffix concatenated after the formatted number.
+ * @returns Human-readable numeric string with optional suffix.
  */
 export const decimalToFixedString = (number: number, maxPlaces = 2, append = '') => {
   const fixedNumber = number.toFixed(maxPlaces);
@@ -334,21 +346,22 @@ export const decimalToFixedString = (number: number, maxPlaces = 2, append = '')
 };
 
 /**
- * generate a random number from min to max
+ * Inclusive random integer in `[min, max]` using `Math.random()` (not cryptographically secure).
  *
- * @param min
- * @param max
- * @returns
+ * @param min - Lower bound (inclusive).
+ * @param max - Upper bound (inclusive).
+ * @returns Random integer between `min` and `max`.
  */
 export const randomNumber = (min: number, max: number) => {
   return Math.floor(Math.random() * (max - min + 1) + min);
 };
 
 /**
- * gets a boolean value based on the given probability (1:N or basically 1/N)
+ * Returns `true` with probability `probability` using `crypto.getRandomValues` (uniform in `[0,1)`).
+ * Values `<= 0` yield `false`; `>= 1` yield `true`.
  *
- * @param probability
- * @returns
+ * @param probability - Success probability in `(0, 1)` for non-trivial randomness.
+ * @returns Random boolean outcome.
  */
 export const chance = (probability: number) => {
   if (probability <= 0) return false;
@@ -359,26 +372,33 @@ export const chance = (probability: number) => {
 };
 
 /**
- * a more secure generator for random numberes
+ * Inclusive random integer in `[min, max]` using `crypto.randomInt` (cryptographically secure).
  *
- * @param min
- * @param max
- * @returns
+ * @param min - Lower bound (inclusive).
+ * @param max - Upper bound (inclusive).
+ * @returns Secure random integer.
  */
 export const secureRandomNumber = (min: number, max: number) => crypto.randomInt(min, max + 1);
 
 /**
- * gets the key from an object given its value.
+ * Finds the first key in `obj` whose value strictly equals `value`.
  *
- * @param obj
- * @param value
- * @returns
+ * @typeParam T - Object type with comparable values.
+ * @param obj - Key/value map to search.
+ * @param value - Value to match (`===`).
+ * @returns The matching key, or `undefined` if none.
  */
 export const getKeyByValue = <T extends Record<PropertyKey, PropertyKey>>(
   obj: T,
   value: T[keyof T],
 ): keyof T | undefined => (Object.keys(obj) as (keyof T)[]).find((key) => obj[key] === value);
 
+/**
+ * Performs an HTTP GET to `path` and returns whether the response status is 2xx.
+ *
+ * @param path - Full URL to request.
+ * @returns `true` on success; `false` on network errors or non-2xx status.
+ */
 export const remotePathExists = async (path: string) => {
   try {
     await axios.get(path, {
@@ -390,6 +410,13 @@ export const remotePathExists = async (path: string) => {
   }
 };
 
+/**
+ * Parses JSON text; on failure logs the error and returns `null` (default) or `{}`.
+ *
+ * @param jsonString - Raw JSON.
+ * @param makeFallbackValueNull - If `true` (default), failed parse yields `null`; otherwise `{}`.
+ * @returns Parsed value, or fallback on parse error.
+ */
 export const parseJSON = (jsonString: string, makeFallbackValueNull = true) => {
   let value = makeFallbackValueNull ? null : {};
 
@@ -400,4 +427,18 @@ export const parseJSON = (jsonString: string, makeFallbackValueNull = true) => {
   }
 
   return value;
+};
+
+/**
+ * Constant-time string comparison of UTF-8 byte sequences. Returns `false` if lengths differ.
+ *
+ * @param a - First string.
+ * @param b - Second string.
+ * @returns `true` if byte contents are identical and lengths match.
+ */
+export const timingSafeEqual = (a: string, b: string) => {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
 };
