@@ -1,6 +1,7 @@
 import _ from 'lodash'
 import { EnabledModules, Module } from './modules/defines';
 import { HttpConfig } from './modules/http/defines';
+import { PdfConfig } from './modules/pdf/defines';
 import { WSConfig } from './modules/websockets/defines';
 import { Server } from './index';
 
@@ -19,6 +20,7 @@ export interface ServerConfig {
 
   // http sub modules and configuration
   http?: HttpConfig;
+  pdf?: PdfConfig;
   websockets?: WSConfig;
 }
 

@@ -5,7 +5,7 @@ import { Server } from '@server/.';
 import Log from '@server/logs';
 
 export const ModulesFolder = `${currentDir}/server/modules`;
-export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe' | 'cron';
+export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe' | 'cron' | 'pdf';
 export type EnabledModules = Module[];
 
 export interface ServerModuleSettings {
