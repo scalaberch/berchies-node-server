@@ -5,6 +5,11 @@ const path = require("path");
 const { builtinModules } = require("module");
 const { execSync } = require("child_process");
 
+if (process.env.SKIP_BACKEND_PREINSTALL === "1") {
+  console.log("Skipping backend preinstall script.");
+  process.exit(0);
+}
+
 const projectRoot = path.resolve(__dirname, "../../");
 const serverDir = path.join(projectRoot, "server");
 const outputFile = path.join(serverDir, "packages.txt");

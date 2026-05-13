@@ -23,6 +23,7 @@ moment-timezone@0.6.1
 moralis@UNKNOWN
 mysql2@3.22.1
 obscenity@UNKNOWN
+pdf-lib@1.17.1
 redis@5.12.1
 uuid@13.0.0
 winston@3.19.0
