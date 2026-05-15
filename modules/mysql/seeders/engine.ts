@@ -31,12 +31,33 @@ function createSeedContext(seedRunId: string): SeedContext {
   };
 }
 
+/** Log insert progress within a large step (simulation profile, etc.). */
+const ROW_PROGRESS_INTERVAL = 500;
+
+function logStepProgress(stepLabel: string, table: SeedTableName, inserted: number, total: number): void {
+  console.log(`[seed] ${stepLabel} ${table} — ${inserted}/${total} rows inserted…`);
+}
+
 export async function runSeedProfile(db: Kysely<DB>, profile: SeedProfile): Promise<{ seedRunId: string }> {
   faker.seed(profile.fakerSeed);
   const seedRunId = crypto.randomBytes(4).toString('hex');
   const ctx = createSeedContext(seedRunId);
+  const totalSteps = profile.tables.length;
 
-  for (const def of profile.tables) {
+  console.log(
+    `[seed] Profile "${profile.name}" starting (fakerSeed=${profile.fakerSeed}, seedRunId=${seedRunId}).`,
+  );
+  console.log(`[seed] Plan (${totalSteps} step${totalSteps === 1 ? '' : 's'}):`);
+  for (let i = 0; i < profile.tables.length; i++) {
+    const def = profile.tables[i];
+    console.log(`[seed]   ${i + 1}. ${def.table} (${def.count} row${def.count === 1 ? '' : 's'})`);
+  }
+
+  for (let stepIndex = 0; stepIndex < profile.tables.length; stepIndex++) {
+    const def = profile.tables[stepIndex];
+    const stepNum = stepIndex + 1;
+    const stepLabel = `[${stepNum}/${totalSteps}]`;
+
     for (const dep of def.dependsOn ?? []) {
       if (ctx.ids(dep).length === 0) {
         throw new Error(
@@ -56,6 +77,11 @@ export async function runSeedProfile(db: Kysely<DB>, profile: SeedProfile): Prom
       }
     }
 
+    const rowLabel = def.count === 1 ? 'row' : 'rows';
+    console.log(`[seed] ${stepLabel} ${def.table} — inserting ${def.count} ${rowLabel}…`);
+    const stepStarted = Date.now();
+    const showRowProgress = def.count > ROW_PROGRESS_INTERVAL;
+
     for (let i = 0; i < def.count; i++) {
       const row = await Promise.resolve(
         def.buildRow({
@@ -69,7 +95,14 @@ export async function runSeedProfile(db: Kysely<DB>, profile: SeedProfile): Prom
       const id = (row as { id: Buffer }).id;
       await db.insertInto(def.table).values(row as DB[keyof DB]).execute();
       ctx.register(def.table, id);
+
+      if (showRowProgress && (i + 1) % ROW_PROGRESS_INTERVAL === 0) {
+        logStepProgress(stepLabel, def.table, i + 1, def.count);
+      }
     }
+
+    const elapsedSec = ((Date.now() - stepStarted) / 1000).toFixed(1);
+    console.log(`[seed] ${stepLabel} ${def.table} — done (${def.count} ${rowLabel}, ${elapsedSec}s)`);
   }
 
   return { seedRunId };

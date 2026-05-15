@@ -12,7 +12,7 @@ import { runSeedProfile } from './engine';
 async function main() {
   const profileName = process.argv[2];
   if (!profileName) {
-    console.error('Usage: npm run seed -- <profile>');
+    console.error('Usage: npm run db:seed -- <profile>');
     console.error(`Available profiles: ${listSeedProfiles().join(', ')}`);
     process.exit(1);
   }
