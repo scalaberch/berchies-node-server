@@ -59,11 +59,11 @@ export class Server {
     // load all modules
     await this.modules.initialize(this);
 
-    // then find the src/main file and if it exists, run the main function
     this.ready = true;
     Log.info(`\n🟢 Server is ready.\n\n`);
+
     if (typeof Main === 'function') {
-      Main(this);
+      await Main(this);
     }
   }
 

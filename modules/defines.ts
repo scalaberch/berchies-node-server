@@ -1,10 +1,10 @@
 import path from 'path';
-import Files, { currentDir } from '@server/lib/files';
 import { ServerConfig } from '@server/defines';
 import { Server } from '@server/.';
 import Log from '@server/logs';
 
-export const ModulesFolder = `${currentDir}/server/modules`;
+/** Compiled modules live next to this file (dist/server/modules in production). */
+export const ModulesFolder = path.resolve(__dirname);
 export type Module = 'http' | 'cache' | 'mysql' | 'websockets' | 'stripe' | 'cron' | 'pdf';
 export type EnabledModules = Module[];
 

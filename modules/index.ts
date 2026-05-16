@@ -1,16 +1,12 @@
 import path from 'path';
-import Files, { currentDir } from '@server/lib/files';
-import { Module, ServerModule } from './defines';
+import Files from '@server/lib/files';
+import { Module, ServerModule, ModulesFolder } from './defines';
 import AppServer, { Server } from '../index';
 import { inArray } from '@server/helpers';
 import { ServerConfig } from '@server/defines';
 import Log from '@server/logs';
 
-/**
- * module folder location
- *
- */
-export const ModulesFolder = `${currentDir}/server/modules`;
+export { ModulesFolder };
 
 /**
  * application module handler

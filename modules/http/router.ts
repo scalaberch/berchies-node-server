@@ -1,5 +1,5 @@
 import express, { Express, Router, Response, Request, NextFunction } from 'express';
-import Files, { currentDir, Path } from '@server/lib/files';
+import Files, { Path, resolveSrcPath } from '@server/lib/files';
 import { rateLimit } from 'express-rate-limit';
 import { fetchAllFiles } from '@server/helpers';
 import { output, notFoundHandler, tooManyRequestsHandler } from './utils/handlers';
@@ -12,8 +12,6 @@ import {
   HttpNext,
   HEALTH_CHECK_RPM,
 } from './defines';
-
-const routesPath = './src/routes/';
 
 /**
  *
@@ -41,21 +39,20 @@ export const defaultRoute = (req: HttpRequest, res: HttpResponse) => {
 export const loadRoutes = async (server: Express): Promise<string[]> => {
   const loadedRouteBasePaths = [];
   const allowedExts = ['ts', 'js'];
-  const routePath = Path.join(routesPath);
-  const files = Files.getFiles(routesPath);
+  const routesDir = resolveSrcPath('routes');
+  const files = Files.getFiles(routesDir);
 
   if (files.length === 0) {
     return loadedRouteBasePaths;
   }
 
   for (const routeFile of files) {
-    const relativeFilePath = routeFile.replace(routePath, '');
+    const relativeFilePath = Path.relative(routesDir, routeFile);
     if (!Files.isFileExtension(relativeFilePath, allowedExts)) {
       continue;
     }
 
-    const selectedRoutePath = Path.join(currentDir, routePath, relativeFilePath);
-    const routeModule = await import(selectedRoutePath);
+    const routeModule = await import(routeFile);
     if (!isValidRouteModule(routeModule?.default)) {
       continue;
     }
@@ -69,7 +66,7 @@ export const loadRoutes = async (server: Express): Promise<string[]> => {
 };
 
 export const loadRoutesLegacy = async (server: Express) => {
-  // const routesPath = "./src/routes";
+  const routesPath = resolveSrcPath('routes');
   const files: Array<string> = fetchAllFiles(routesPath, [], ['README.md', '.DS_Store']);
 
   if (files.length === 0) {
@@ -92,8 +89,7 @@ export const loadRoutesLegacy = async (server: Express) => {
       continue;
     }
 
-    const path = `${process.cwd()}/src/routes${relativeFilePath}`;
-    const routeModule = await import(path);
+    const routeModule = await import(Path.join(routesPath, relativeFilePath));
     if (!isValidRouteModule(routeModule)) {
       continue;
     }

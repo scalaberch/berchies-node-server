@@ -35,6 +35,22 @@ export const Path = path;
 export const currentDir = process.cwd();
 
 /**
+ * Resolve `src/...` in dev; `dist/src/...` in production (artifact has no top-level `src/`).
+ * Prefers `src/` when both exist so nodemon edits are not shadowed by an old `dist/` build.
+ */
+export const resolveSrcPath = (...parts: string[]): string => {
+  const srcPath = path.join(currentDir, 'src', ...parts);
+  const distPath = path.join(currentDir, 'dist', 'src', ...parts);
+  if (fs.existsSync(srcPath)) {
+    return srcPath;
+  }
+  if (fs.existsSync(distPath)) {
+    return distPath;
+  }
+  return srcPath;
+};
+
+/**
  * check if a folder exists
  *
  * @param folderPath
@@ -155,11 +171,12 @@ export const isRunningInTypeScript = () => {
 
 export default {
   currentDir,
+  resolveSrcPath,
   isFileExtension,
   downloadFile,
   folderExists,
   createFolder,
   getFolders,
   getFiles,
-  isRunningInTypeScript
+  isRunningInTypeScript,
 };
