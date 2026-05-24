@@ -153,8 +153,9 @@ export interface PaginationResult {
   hasNextPage: boolean,
 }
 export interface PaginationSettings {
-  select?: [];
-  includeSoftDeletes?: boolean
+  /** Column refs for the paginated row query (not applied to the count query). */
+  select?: readonly string[];
+  includeSoftDeletes?: boolean;
 }
 
 /**
