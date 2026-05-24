@@ -2,7 +2,16 @@ import _ from 'lodash'
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-// export { default as S3Files } from "./s3";
+export { sanitizeFileName } from './names';
+export {
+  S3Storage,
+  S3_NOT_CONFIGURED,
+  createS3Storage,
+  joinObjectKey,
+  type S3PutObjectInput,
+  type S3StorageOptions,
+} from './s3';
+export { default as S3Files } from './s3';
 
 const downloadFile = async (remotePath: string, downloadPath: string) => {
   if (fs.existsSync(downloadPath)) {
