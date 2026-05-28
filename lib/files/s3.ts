@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getS3Client } from '@server/lib/aws/s3Client';
 
@@ -9,6 +9,10 @@ export type S3PutObjectInput = {
   body: Buffer;
   contentType: string;
   cacheControl?: string;
+};
+
+export type S3DeleteObjectInput = {
+  key: string;
 };
 
 export type S3StorageOptions = {
@@ -50,6 +54,22 @@ export class S3Storage {
         Body: input.body,
         ContentType: input.contentType,
         ...(input.cacheControl ? { CacheControl: input.cacheControl } : {}),
+      }),
+    );
+  }
+
+  async deleteObject(input: S3DeleteObjectInput): Promise<void> {
+    const key = String(input.key ?? '').trim();
+    if (!key) {
+      return;
+    }
+
+    this.assertConfigured();
+
+    await getS3Client().send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
       }),
     );
   }
