@@ -21,6 +21,43 @@ export const generateRandomString = (length: number) => {
     .slice(0, length);
 };
 
+const PASSWORD_LOWERCASE = 'abcdefghijklmnopqrstuvwxyz';
+const PASSWORD_UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const PASSWORD_DIGITS = '0123456789';
+const PASSWORD_SYMBOLS = '!@#$%^&*-_+=';
+
+const pickPasswordChar = (pool: string) => pool[crypto.randomInt(0, pool.length)] ?? '';
+
+const shufflePasswordChars = (chars: string[]) => {
+  const next = [...chars];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = crypto.randomInt(0, i + 1);
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
+
+/**
+ * Generates a random password with mixed case alphanumerics and exactly one symbol.
+ */
+export const generateRandomPassword = (length: number) => {
+  if (length <= 0) {
+    return '';
+  }
+  if (length === 1) {
+    return pickPasswordChar(PASSWORD_SYMBOLS);
+  }
+
+  const alphanumeric = `${PASSWORD_LOWERCASE}${PASSWORD_UPPERCASE}${PASSWORD_DIGITS}`;
+  const chars: string[] = [pickPasswordChar(PASSWORD_SYMBOLS), pickPasswordChar(PASSWORD_UPPERCASE)];
+
+  while (chars.length < length) {
+    chars.push(pickPasswordChar(alphanumeric));
+  }
+
+  return shufflePasswordChars(chars).join('');
+};
+
 /**
  * checks if an email input is a valid input based on some regex
  *
