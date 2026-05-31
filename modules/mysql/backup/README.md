@@ -6,14 +6,18 @@ This module runs MySQL backups from the backend environment and can optionally u
 
 - Runs `mysqldump` with consistent options for InnoDB (`--single-transaction`, `--quick`)
 - Compresses output to `.sql.gz`
-- Stores backup locally in `BACKUP_OUTPUT_DIR`
-- Optionally uploads to S3 when `BACKUP_UPLOAD_TO_S3=1`
+- Stores backup locally in `MYSQL_BACKUP_OUTPUT_DIR`
+- Optionally uploads to S3 when `MYSQL_BACKUP_S3_UPLOAD=1`
 
 ## Run command
 
 From `backend/`:
 
 `npm run backup:mysql`
+
+On EC2 (production artifact):
+
+`node ./dist/server/modules/mysql/backup/run.js`
 
 ## Required env vars
 
@@ -25,16 +29,16 @@ From `backend/`:
 
 ## Optional env vars
 
-- `BACKUP_OUTPUT_DIR` (default: `resources/backups/mysql`)
-- `BACKUP_UPLOAD_TO_S3` (`1` to enable S3 upload, default `0`)
-- `BACKUP_S3_BUCKET` (required only when upload enabled)
-- `BACKUP_S3_PREFIX` (default: `mysql`)
+- `MYSQL_BACKUP_OUTPUT_DIR` (default: `resources/backups/mysql`)
+- `MYSQL_BACKUP_S3_UPLOAD` (`1` to enable S3 upload, default `0`)
+- `MYSQL_BACKUP_S3_BUCKET` (required only when upload enabled)
+- `MYSQL_BACKUP_S3_PREFIX` (default: `mysql`)
 - `AWS_REGION` (default: `ap-southeast-1`)
 - `ENV` (used in S3 key path, default: `local`)
 
 ## S3 key format
 
-`<BACKUP_S3_PREFIX>/<ENV>/full/YYYY/MM/DD/mysql-<db>-<timestamp>.sql.gz`
+`<MYSQL_BACKUP_S3_PREFIX>/<ENV>/full/YYYY/MM/DD/mysql-<db>-<timestamp>.sql.gz`
 
 ## Notes
 

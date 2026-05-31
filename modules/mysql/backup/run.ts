@@ -13,10 +13,10 @@ type BackupEnv = {
   MYSQL_DATABASE: string;
   ENV: string;
   AWS_REGION: string;
-  BACKUP_OUTPUT_DIR: string;
-  BACKUP_UPLOAD_TO_S3: string;
-  BACKUP_S3_BUCKET: string;
-  BACKUP_S3_PREFIX: string;
+  MYSQL_BACKUP_OUTPUT_DIR: string;
+  MYSQL_BACKUP_S3_UPLOAD: string;
+  MYSQL_BACKUP_S3_BUCKET: string;
+  MYSQL_BACKUP_S3_PREFIX: string;
 };
 
 function readEnv(): BackupEnv {
@@ -28,10 +28,11 @@ function readEnv(): BackupEnv {
     MYSQL_DATABASE: process.env.MYSQL_DATABASE ?? '',
     ENV: process.env.ENV ?? 'local',
     AWS_REGION: process.env.AWS_REGION ?? 'ap-southeast-1',
-    BACKUP_OUTPUT_DIR: process.env.BACKUP_OUTPUT_DIR ?? 'resources/backups/mysql',
-    BACKUP_UPLOAD_TO_S3: process.env.BACKUP_UPLOAD_TO_S3 ?? '0',
-    BACKUP_S3_BUCKET: process.env.BACKUP_S3_BUCKET ?? '',
-    BACKUP_S3_PREFIX: process.env.BACKUP_S3_PREFIX ?? 'mysql',
+    MYSQL_BACKUP_OUTPUT_DIR:
+      process.env.MYSQL_BACKUP_OUTPUT_DIR ?? 'resources/backups/mysql',
+    MYSQL_BACKUP_S3_UPLOAD: process.env.MYSQL_BACKUP_S3_UPLOAD ?? '0',
+    MYSQL_BACKUP_S3_BUCKET: process.env.MYSQL_BACKUP_S3_BUCKET ?? '',
+    MYSQL_BACKUP_S3_PREFIX: process.env.MYSQL_BACKUP_S3_PREFIX ?? 'mysql',
   };
 }
 
@@ -104,8 +105,8 @@ async function runMysqlDumpToGzip(env: BackupEnv, outputFile: string): Promise<v
 }
 
 async function uploadToS3(env: BackupEnv, filePath: string, s3Key: string): Promise<void> {
-  if (!env.BACKUP_S3_BUCKET.trim()) {
-    throw new Error('BACKUP_S3_BUCKET is required when BACKUP_UPLOAD_TO_S3=1');
+  if (!env.MYSQL_BACKUP_S3_BUCKET.trim()) {
+    throw new Error('MYSQL_BACKUP_S3_BUCKET is required when MYSQL_BACKUP_S3_UPLOAD=1');
   }
 
   await new Promise<void>((resolve, reject) => {
@@ -115,7 +116,7 @@ async function uploadToS3(env: BackupEnv, filePath: string, s3Key: string): Prom
         's3',
         'cp',
         filePath,
-        `s3://${env.BACKUP_S3_BUCKET}/${s3Key}`,
+        `s3://${env.MYSQL_BACKUP_S3_BUCKET}/${s3Key}`,
         '--region',
         env.AWS_REGION,
         '--sse',
@@ -144,14 +145,14 @@ async function main() {
   const env = readEnv();
   assertRequired(env);
 
-  const uploadToS3Enabled = String(env.BACKUP_UPLOAD_TO_S3).trim() === '1';
+  const uploadToS3Enabled = String(env.MYSQL_BACKUP_S3_UPLOAD).trim() === '1';
   const parts = nowParts();
-  const backupDir = path.resolve(process.cwd(), env.BACKUP_OUTPUT_DIR);
+  const backupDir = path.resolve(process.cwd(), env.MYSQL_BACKUP_OUTPUT_DIR);
   await fsp.mkdir(backupDir, { recursive: true });
 
   const fileName = `mysql-${env.MYSQL_DATABASE}-${parts.stamp}.sql.gz`;
   const outputFile = path.join(backupDir, fileName);
-  const s3Prefix = String(env.BACKUP_S3_PREFIX).replace(/^\/+|\/+$/g, '');
+  const s3Prefix = String(env.MYSQL_BACKUP_S3_PREFIX).replace(/^\/+|\/+$/g, '');
   const s3Key = `${s3Prefix}/${env.ENV}/full/${parts.yyyy}/${parts.mm}/${parts.dd}/${fileName}`;
 
   const startedAt = Date.now();
@@ -161,11 +162,11 @@ async function main() {
   console.info(`[backup] dump completed: ${outputFile} (${stat.size} bytes)`);
 
   if (uploadToS3Enabled) {
-    console.info(`[backup] uploading to s3://${env.BACKUP_S3_BUCKET}/${s3Key}`);
+    console.info(`[backup] uploading to s3://${env.MYSQL_BACKUP_S3_BUCKET}/${s3Key}`);
     await uploadToS3(env, outputFile, s3Key);
     console.info('[backup] upload completed');
   } else {
-    console.info('[backup] BACKUP_UPLOAD_TO_S3 != 1, skipping upload');
+    console.info('[backup] MYSQL_BACKUP_S3_UPLOAD != 1, skipping upload');
   }
 
   const elapsedMs = Date.now() - startedAt;
