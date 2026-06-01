@@ -1,9 +1,13 @@
+import dotenv from 'dotenv';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
+
+// Load .env like the API (avoid `source .env` in shell — `$` in values breaks bash).
+dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: true });
 
 type BackupEnv = {
   MYSQL_HOST: string;
@@ -69,6 +73,7 @@ async function runMysqlDumpToGzip(env: BackupEnv, outputFile: string): Promise<v
       `--user=${env.MYSQL_USER}`,
       '--single-transaction',
       '--quick',
+      '--no-tablespaces',
       '--routines',
       '--triggers',
       '--events',
@@ -90,18 +95,17 @@ async function runMysqlDumpToGzip(env: BackupEnv, outputFile: string): Promise<v
 
   const gzip = zlib.createGzip({ level: 9 });
   const writer = fs.createWriteStream(outputFile);
-  await pipeline(dump.stdout, gzip, writer);
 
-  await new Promise<void>((resolve, reject) => {
+  const exitCode = await new Promise<number>((resolve, reject) => {
     dump.on('error', reject);
-    dump.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`mysqldump failed (code=${code}): ${stderr.trim() || 'no stderr'}`));
-    });
+    dump.on('close', resolve);
+    pipeline(dump.stdout, gzip, writer).catch(reject);
   });
+
+  if (exitCode !== 0) {
+    await fsp.unlink(outputFile).catch(() => undefined);
+    throw new Error(`mysqldump failed (code=${exitCode}): ${stderr.trim() || 'no stderr'}`);
+  }
 }
 
 async function uploadToS3(env: BackupEnv, filePath: string, s3Key: string): Promise<void> {
