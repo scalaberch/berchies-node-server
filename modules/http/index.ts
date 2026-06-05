@@ -19,6 +19,7 @@ import { errorHandler } from './utils/handlers';
 import { bodyParserJsonVerify, setGlobalRateLimit } from './utils';
 import useCookies from './cookies';
 import { AppEnvironments, NodeEnvironments } from '@server/env';
+import { isLanSingleBranchMode } from '@src/config/deployment';
 
 export const PORT: number = parseInt(process.env.PORT || '') || DEFAULT_PORT;
 
@@ -97,7 +98,9 @@ export class Http extends ServerModule {
         return;
       }
 
-      const _server = this.express.listen(this.port, (err) => {
+      const listenHost = String(process.env.HOST ?? '').trim()
+        || (isLanSingleBranchMode() ? '0.0.0.0' : undefined);
+      const onListen = (err?: Error) => {
         if (err) {
           return reject(err);
         }
@@ -105,8 +108,16 @@ export class Http extends ServerModule {
         this.httpServer = _server;
         resolve(_server);
 
-        Log.info(`[http] ✅ HTTP Service is online in: http://localhost:${this.port}`);
-      });
+        const hostLabel = listenHost && listenHost !== '0.0.0.0' ? listenHost : 'localhost';
+        Log.info(`[http] ✅ HTTP Service is online in: http://${hostLabel}:${this.port}`);
+        if (isLanSingleBranchMode() && listenHost === '0.0.0.0') {
+          Log.info(`[http] LAN edition listening on all interfaces (0.0.0.0:${this.port})`);
+        }
+      };
+
+      const _server = listenHost
+        ? this.express.listen(this.port, listenHost, onListen)
+        : this.express.listen(this.port, onListen);
     });
   }
 
