@@ -1,0 +1,60 @@
+import { ServerConfig } from '@server/defines';
+import { EnabledModules } from '@server/modules/defines';
+import { HttpConfig } from '@server/modules/http/defines';
+import { WSConfig } from '@server/modules/websockets/defines';
+
+/**
+ * Enabled modules
+ *
+ * You can specify what module/s to start
+ */
+const modules: EnabledModules = [
+  'cache',
+  'mysql',
+  'http',
+  'websockets',
+  // 'stripe'
+];
+
+/**
+ * CORS Domains white-list
+ *
+ * Here you specify the allowed cors-domains
+ * ref Access-Control-Allow-Origin. Basically all front-end
+ * domains that would connect to the api must be registered here.
+ *
+ */
+const corsDomainList = [];
+
+/**
+ * HTTP config
+ * 
+ * Here we define configuration for http module.
+ */
+const httpConfig: HttpConfig = {
+  corsDomainList,
+  enableCookies: false,
+}
+
+/**
+ * WebSockets Configuration
+ * 
+ * Here we define configuration for websockets module.
+ *
+ */
+const websocketConfig: WSConfig = {
+  authMethod: 'jwt',
+  encryptedMessages: true
+};
+
+/**
+ * main server config
+ * 
+ */
+const AppConfig: ServerConfig = {
+  modules,
+  websockets: websocketConfig,
+  http: httpConfig
+};
+
+export default AppConfig;

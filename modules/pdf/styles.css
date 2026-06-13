@@ -1,0 +1,56 @@
+/* Base stylesheet for server-side PDF generation. */
+:root {
+  --pdf-font-family: Inter, Arial, Helvetica, sans-serif;
+  --pdf-text: #111827;
+  --pdf-muted: #6b7280;
+  --pdf-border: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--pdf-text);
+  font-family: var(--pdf-font-family);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pdf-page {
+  padding: 20px 24px;
+}
+
+.pdf-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.pdf-subtitle {
+  margin: 0;
+  color: var(--pdf-muted);
+}
+
+.pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.pdf-table th,
+.pdf-table td {
+  border: 1px solid var(--pdf-border);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pdf-table th {
+  background: #f9fafb;
+  font-weight: 600;
+}
+

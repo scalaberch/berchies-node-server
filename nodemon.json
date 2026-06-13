@@ -1,0 +1,9 @@
+{
+  "ignore": ["**/*.test.ts", "**/*.spec.ts", "node_modules"],
+  "watch": ["server", "src"],
+  "exec": "node -r ts-node/register --inspect ./index.ts",
+  "ext": "ts,js",
+  "legacyWatch": true,
+  "signal": "SIGTERM",
+  "killTimeout": 5000
+}
