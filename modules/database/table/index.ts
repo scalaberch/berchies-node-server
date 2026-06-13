@@ -345,8 +345,33 @@ export default class DbTable {
     const pk = this.getPrimaryKey();
 
     const record = this.prepareInsertRecord(parameters, uuid);
+
+    if (this.isPrimaryKeyUUID()) {
+      const result = await db.insertInto(this.getTableName()).values(record).executeTakeFirst();
+      return {
+        insertId: uuid,
+        insertParameters: record,
+        isCreated: Number(result.numInsertedOrUpdatedRows) > 0,
+      };
+    }
+
+    if (this.db().getDriver() === 'postgres') {
+      const inserted = await db
+        .insertInto(this.getTableName())
+        .values(record)
+        .returning(pk)
+        .executeTakeFirst();
+
+      const insertId = inserted?.[pk];
+      return {
+        insertId: insertId != null ? String(insertId) : (record[pk] as DbInsertResult['insertId']),
+        insertParameters: record,
+        isCreated: insertId != null,
+      };
+    }
+
     const result = await db.insertInto(this.getTableName()).values(record).executeTakeFirst();
-    const insertId = this.isPrimaryKeyUUID() ? uuid : (result.insertId?.toString() ?? record[pk]);
+    const insertId = result.insertId?.toString() ?? record[pk];
 
     return {
       insertId,
