@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+﻿import express, { Express } from 'express';
 import helmet from 'helmet';
 import bodyParser from 'body-parser';
 import { express as useragent } from 'express-useragent';
@@ -77,7 +77,7 @@ export class Http extends ServerModule {
         }
         this.httpServer = _server;
         resolve(_server);
-        Log.info(`[http] ✅ HTTP Service is online in: http://localhost:${this.port}`);
+        Log.info(`[http] Γ£à HTTP Service is online in: http://localhost:${this.port}`);
       });
     });
   }

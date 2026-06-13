@@ -1,5 +1,6 @@
 axios@1.17.0
 bcrypt@6.0.0
+body-parser@2.2.2
 cookie-parser@1.4.7
 cors@2.8.6
 cron-parser@5.5.0
@@ -7,8 +8,11 @@ csv-writer@1.6.0
 dotenv@17.4.2
 ethers@6.16.0
 express@5.2.1
+express-list-endpoints@7.1.1
 express-rate-limit@8.5.2
 express-session@1.19.0
+express-useragent@2.1.0
+helmet@8.1.0
 ip@2.0.1
 jsonwebtoken@9.0.3
 kysely@0.28.17
@@ -20,6 +24,7 @@ moralis@2.27.2
 mysql2@3.22.5
 obscenity@0.4.6
 pdf-lib@1.17.1
+pg@8.21.0
 redis@5.12.1
 uuid@11.1.1
 winston@3.19.0
